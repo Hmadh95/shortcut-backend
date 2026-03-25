@@ -101,19 +101,13 @@ def _download_video(job_id: str, url: str):
         'match_filter': yt_dlp.utils.match_filter_func('duration < 1200'),
     }
 
-    # أولاً: جرب قراءة الـ Cookies من Environment Variable
-    cookies_content = os.environ.get('YOUTUBE_COOKIES')
-    if cookies_content:
-        cookies_path = f"downloads/{job_id}_cookies.txt"
-        with open(cookies_path, 'w') as f:
-            f.write(cookies_content)
+    # قراءة الـ Cookies من الملف المحلي (يُكتب تلقائياً من ENV عند البدء)
+    cookies_path = '/app/cookies.txt'
+    if os.path.exists(cookies_path):
         ydl_opts['cookiefile'] = cookies_path
-
-    # ثانياً: إذا لم يوجد، جرب الملف المحلي
+        print(f"[✅] Using cookies from {cookies_path}")
     else:
-        cookies_path = os.path.join(os.path.dirname(__file__), 'cookies.txt')
-        if os.path.exists(cookies_path):
-            ydl_opts['cookiefile'] = cookies_path
+        print("[⚠️] No cookies file found")
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
