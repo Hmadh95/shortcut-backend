@@ -96,21 +96,18 @@ def _download_video(job_id: str, url: str):
     ydl_opts = {
         'format': 'best[height<=720]/best',
         'outtmpl': output_template,
-        'quiet': True,
-        'no_warnings': True,
+        'quiet': False,
+        'no_warnings': False,
         'match_filter': yt_dlp.utils.match_filter_func('duration < 1200'),
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
         'extractor_args': {
             'youtube': {
-                'player_client': ['web', 'android'],
+                'player_client': ['android'],
+                'player_skip': ['webpage', 'configs'],
             }
         },
-        'sleep_interval': 2,
-        'max_sleep_interval': 5,
+        'http_headers': {
+            'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+        },
     }
 
     # قراءة الـ Cookies من الملف المحلي (يُكتب تلقائياً من ENV عند البدء)
