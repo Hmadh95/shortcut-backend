@@ -99,15 +99,37 @@ def _download_video(job_id: str, url: str):
         'quiet': True,
         'no_warnings': True,
         'match_filter': yt_dlp.utils.match_filter_func('duration < 1200'),
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web', 'android'],
+            }
+        },
+        'sleep_interval': 2,
+        'max_sleep_interval': 5,
     }
 
     # قراءة الـ Cookies من الملف المحلي (يُكتب تلقائياً من ENV عند البدء)
     cookies_path = '/app/cookies.txt'
+    print(f"[DEBUG] Looking for cookies at: {cookies_path}")
+    print(f"[DEBUG] File exists: {os.path.exists(cookies_path)}")
     if os.path.exists(cookies_path):
+        size = os.path.getsize(cookies_path)
+        print(f"[DEBUG] Cookies file size: {size} bytes")
         ydl_opts['cookiefile'] = cookies_path
         print(f"[✅] Using cookies from {cookies_path}")
     else:
-        print("[⚠️] No cookies file found")
+        print("[⚠️] No cookies file found — trying env var directly")
+        cookies_content = os.environ.get('YOUTUBE_COOKIES', '')
+        if cookies_content:
+            with open(cookies_path, 'w') as f:
+                f.write(cookies_content)
+            ydl_opts['cookiefile'] = cookies_path
+            print(f"[✅] Cookies written from ENV directly")
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
