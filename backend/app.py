@@ -12,12 +12,15 @@ from flask_cors import CORS
 from processor import process_video
 
 app = Flask(__name__)
-
-# السماح للـ Frontend على GitHub Pages بالاتصال
 CORS(app, origins=["*"])
-
-# قاعدة بيانات المهام في الذاكرة
 jobs = {}
+
+# تحقق من وجود الـ Cookies عند البدء
+cookies = os.environ.get('YOUTUBE_COOKIES')
+if cookies:
+    print(f"[✅] YOUTUBE_COOKIES loaded ({len(cookies)} chars)")
+else:
+    print("[⚠️] YOUTUBE_COOKIES not found — YouTube may block requests")
 
 
 # ── Health Check ─────────────────────────────────────────────
