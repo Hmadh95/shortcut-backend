@@ -94,7 +94,7 @@ def _download_video(job_id: str, url: str):
     output_template = f"downloads/{job_id}.%(ext)s"
 
     ydl_opts = {
-        'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
+        'format': 'best[height<=720]/best',
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
