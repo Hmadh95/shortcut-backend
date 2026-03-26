@@ -270,46 +270,52 @@ def _transcribe(audio_path: str) -> list:
 
 def _find_best_clips(segments: list, total_duration: float,
                      clip_duration: int = 45, max_clips: int = 3) -> list:
-    """
-    خوارزمية اختيار أفضل المقاطع:
-    - كثافة الكلام العالية = محتوى مهم
-    - تجنب الفترات الهادئة والمقدمات
-    - ضمان عدم تداخل المقاطع
-    """
+    """اختيار أفضل المقاطع"""
+
+    # تأكد أن المدة الكلية معقولة
+    if total_duration <= 0:
+        total_duration = 300
+
+    # قلل مدة الكليب إذا كان الفيديو قصيراً
+    clip_duration = min(clip_duration, int(total_duration / 2))
+    clip_duration = max(10, clip_duration)
+
     if not segments:
-        # إذا لم يُتعرف على كلام، قسّم الفيديو بالتساوي
         return _equal_split(total_duration, clip_duration, max_clips)
 
-    # احسب نقاط لكل موضع ممكن
     candidates = []
-    step = 5  # جرّب كل 5 ثواني
+    step = 5
 
     for start in range(0, max(1, int(total_duration - clip_duration)), step):
-        end = start + clip_duration
-        # اجمع كل الكلام الذي يقع في هذا النطاق
+        end = min(start + clip_duration, total_duration)
+        actual_duration = end - start
+
+        if actual_duration < 10:
+            continue
+
         text_in_range = ' '.join(
             seg['text'] for seg in segments
             if seg['start'] >= start and seg['end'] <= end
         )
         word_count = len(text_in_range.split())
-        # النقاط = عدد الكلمات لكل ثانية
-        score = word_count / clip_duration
+        score = word_count / actual_duration
+
         candidates.append({
             'start':    float(start),
-            'duration': float(min(clip_duration, total_duration - start)),
+            'duration': float(actual_duration),
             'text':     text_in_range.strip(),
             'score':    score
         })
 
-    # رتّب من الأعلى نقاطاً
+    if not candidates:
+        return _equal_split(total_duration, clip_duration, max_clips)
+
     candidates.sort(key=lambda x: x['score'], reverse=True)
 
-    # اختر أفضل المقاطع مع ضمان عدم التداخل
     selected = []
     for candidate in candidates:
         if len(selected) >= max_clips:
             break
-        # تأكد أنه لا يتداخل مع مقطع مختار مسبقاً
         overlap = any(
             abs(candidate['start'] - s['start']) < clip_duration
             for s in selected
@@ -337,24 +343,35 @@ def _equal_split(total_duration: float, clip_duration: int, max_clips: int) -> l
 
 def _create_short(video_path: str, output_path: str, clip: dict):
     """قص الفيديو وتحويله إلى نسبة 9:16"""
+
+    start    = max(0, float(clip['start']))
+    duration = max(10, min(60, float(clip['duration'])))
+
+    print(f"[FFmpeg] start={start} duration={duration} input={video_path}")
+
     cmd = [
         'ffmpeg', '-y',
-        '-ss', str(clip['start']),
         '-i', video_path,
-        '-t', str(clip['duration']),
-        '-vf', 'scale=iw*min(1080/iw\\,1920/ih):ih*min(1080/iw\\,1920/ih),pad=1080:1920:(1080-iw)/2:(1920-ih)/2:black',
+        '-ss', str(start),
+        '-t',  str(duration),
+        '-vf', 'scale=640:360,pad=640:1136:0:(1136-360)/2:black',
         '-c:v', 'libx264',
-        '-preset', 'fast',
-        '-crf', '23',
+        '-preset', 'ultrafast',
+        '-crf', '28',
         '-c:a', 'aac',
         '-b:a', '128k',
         '-movflags', '+faststart',
         output_path
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
     if result.returncode != 0:
-        raise RuntimeError(f"FFmpeg error: {result.stderr[-500:]}")
+        print(f"[FFmpeg STDERR]: {result.stderr[-1000:]}")
+        raise RuntimeError(f"FFmpeg failed: {result.stderr[-300:]}")
+
+    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+        raise RuntimeError("FFmpeg produced empty file")
 
 
 def _cleanup(*paths):
