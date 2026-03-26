@@ -336,29 +336,25 @@ def _equal_split(total_duration: float, clip_duration: int, max_clips: int) -> l
 
 
 def _create_short(video_path: str, output_path: str, clip: dict):
-    """
-    قص الفيديو وتحويله إلى نسبة 9:16 (Shorts/Reels/TikTok)
-    الدقة: 1080x1920 — الجودة: عالية
-    """
+    """قص الفيديو وتحويله إلى نسبة 9:16"""
     cmd = [
         'ffmpeg', '-y',
-        '-ss', str(clip['start']),          # نقطة البداية
+        '-ss', str(clip['start']),
         '-i', video_path,
-        '-t', str(clip['duration']),        # المدة
-        # تحويل النسبة: اقتص المنتصف ثم تحجيم
-        '-vf', 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920',
+        '-t', str(clip['duration']),
+        '-vf', 'scale=iw*min(1080/iw\\,1920/ih):ih*min(1080/iw\\,1920/ih),pad=1080:1920:(1080-iw)/2:(1920-ih)/2:black',
         '-c:v', 'libx264',
         '-preset', 'fast',
-        '-crf', '23',                       # جودة عالية (أقل = أفضل)
+        '-crf', '23',
         '-c:a', 'aac',
         '-b:a', '128k',
-        '-movflags', '+faststart',          # تحسين للـ streaming
+        '-movflags', '+faststart',
         output_path
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
-        raise RuntimeError(f"FFmpeg error: {result.stderr}")
+        raise RuntimeError(f"FFmpeg error: {result.stderr[-500:]}")
 
 
 def _cleanup(*paths):
