@@ -15,12 +15,11 @@ app = Flask(__name__)
 CORS(app, origins=["*"])
 jobs = {}
 
-# تحقق من وجود الـ Cookies عند البدء
+# تحقق من المتغيرات عند البدء
 cookies = os.environ.get('YOUTUBE_COOKIES')
-if cookies:
-    print(f"[✅] YOUTUBE_COOKIES loaded ({len(cookies)} chars)")
-else:
-    print("[⚠️] YOUTUBE_COOKIES not found — YouTube may block requests")
+api_key = os.environ.get('YOUTUBE_API_KEY')
+print(f"[{'✅' if cookies else '⚠️'}] YOUTUBE_COOKIES: {'loaded' if cookies else 'NOT FOUND'}")
+print(f"[{'✅' if api_key else '⚠️'}] YOUTUBE_API_KEY: {'loaded' if api_key else 'NOT FOUND'}")
 
 
 # ── Health Check ─────────────────────────────────────────────
