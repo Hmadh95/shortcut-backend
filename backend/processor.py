@@ -5,7 +5,8 @@
 
 import os
 import subprocess
-import yt_dlp
+import requests
+import urllib.request
 from faster_whisper import WhisperModel
 
 
@@ -16,34 +17,38 @@ def process_video(job_id: str, url: str, jobs: dict):
         os.makedirs('downloads', exist_ok=True)
         os.makedirs('outputs', exist_ok=True)
 
-        # ── المرحلة 1: تحميل الفيديو من YouTube ─────────
-        _update(jobs, job_id, 5, 'جارٍ تحميل الفيديو من YouTube...')
+        # ── المرحلة 1: استخراج معلومات الفيديو ──────────
+        _update(jobs, job_id, 5, 'جارٍ استخراج معلومات الفيديو...')
 
-        video_path, duration, title = _download_video(job_id, url)
+        video_id = _extract_video_id(url)
+        video_info = _get_video_info(video_id)
+        duration = video_info['duration']
+        title = video_info['title']
 
-        # ── المرحلة 2: استخراج ملف الصوت ────────────────
-        _update(jobs, job_id, 25, 'جارٍ استخراج الصوت...')
+        # ── المرحلة 2: تحميل الفيديو ─────────────────────
+        _update(jobs, job_id, 15, 'جارٍ تحميل الفيديو...')
+        video_path = _download_video(job_id, video_id)
 
+        # ── المرحلة 3: استخراج ملف الصوت ────────────────
+        _update(jobs, job_id, 35, 'جارٍ استخراج الصوت...')
         audio_path = _extract_audio(job_id, video_path)
 
-        # ── المرحلة 3: Whisper يحوّل الصوت إلى نص ───────
-        _update(jobs, job_id, 40, 'الذكاء الاصطناعي يتعرف على الكلام...')
-
+        # ── المرحلة 4: Whisper يحوّل الصوت إلى نص ───────
+        _update(jobs, job_id, 50, 'الذكاء الاصطناعي يتعرف على الكلام...')
         segments = _transcribe(audio_path)
 
-        # ── المرحلة 4: اختيار أفضل اللحظات ─────────────
-        _update(jobs, job_id, 65, 'AI يحدد أفضل اللحظات...')
-
+        # ── المرحلة 5: اختيار أفضل اللحظات ─────────────
+        _update(jobs, job_id, 70, 'AI يحدد أفضل اللحظات...')
         best_clips = _find_best_clips(segments, duration)
 
-        # ── المرحلة 5: قص الفيديو وتحويله إلى 9:16 ──────
-        _update(jobs, job_id, 75, 'جارٍ إنشاء الـ Shorts...')
+        # ── المرحلة 6: قص الفيديو وتحويله إلى 9:16 ──────
+        _update(jobs, job_id, 80, 'جارٍ إنشاء الـ Shorts...')
 
         clip_results = []
         total = len(best_clips)
 
         for i, clip in enumerate(best_clips):
-            progress = 75 + int((i / total) * 20)
+            progress = 80 + int((i / total) * 15)
             _update(jobs, job_id, progress, f'جارٍ معالجة الكليب {i + 1} من {total}...')
 
             output_path = f"outputs/{job_id}_short_{i}.mp4"
@@ -59,7 +64,6 @@ def process_video(job_id: str, url: str, jobs: dict):
                 'download': f"/api/download/{job_id}/{i}"
             })
 
-        # ── النهاية ──────────────────────────────────────
         jobs[job_id].update({
             'status':   'done',
             'progress': 100,
@@ -68,7 +72,6 @@ def process_video(job_id: str, url: str, jobs: dict):
             'title':    title,
         })
 
-        # تنظيف الملفات المؤقتة
         _cleanup(video_path, audio_path)
 
     except Exception as e:
@@ -83,26 +86,80 @@ def process_video(job_id: str, url: str, jobs: dict):
 # ── دوال مساعدة ───────────────────────────────────────────────
 
 def _update(jobs, job_id, progress, step):
-    """تحديث حالة المهمة"""
     jobs[job_id]['progress'] = progress
     jobs[job_id]['step'] = step
     print(f"[{job_id[:8]}] {progress}% — {step}")
 
 
-def _download_video(job_id: str, url: str):
-    """تحميل الفيديو بأفضل جودة مع الحفاظ على السرعة"""
+def _extract_video_id(url: str) -> str:
+    """استخراج معرّف الفيديو من الرابط"""
+    import re
+    patterns = [
+        r'(?:v=|youtu\.be/|embed/|shorts/)([a-zA-Z0-9_-]{11})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    raise ValueError(f"لم يتم التعرف على رابط YouTube: {url}")
+
+
+def _get_video_info(video_id: str) -> dict:
+    """جلب معلومات الفيديو عبر YouTube Data API"""
+    api_key = os.environ.get('YOUTUBE_API_KEY')
+    if not api_key:
+        raise ValueError("YOUTUBE_API_KEY غير موجود في المتغيرات")
+
+    url = f"https://www.googleapis.com/youtube/v3/videos"
+    params = {
+        'id': video_id,
+        'key': api_key,
+        'part': 'snippet,contentDetails'
+    }
+
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    if not data.get('items'):
+        raise ValueError(f"الفيديو غير موجود أو محظور: {video_id}")
+
+    item = data['items'][0]
+    title = item['snippet']['title']
+
+    # تحويل مدة ISO 8601 إلى ثواني
+    duration_str = item['contentDetails']['duration']
+    duration = _parse_duration(duration_str)
+
+    return {'title': title, 'duration': duration, 'id': video_id}
+
+
+def _parse_duration(duration_str: str) -> float:
+    """تحويل PT1H2M3S إلى ثواني"""
+    import re
+    pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
+    match = re.match(pattern, duration_str)
+    if not match:
+        return 0
+    hours   = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+    seconds = int(match.group(3) or 0)
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _download_video(job_id: str, video_id: str) -> str:
+    """تحميل الفيديو باستخدام yt-dlp مع YouTube Data API للمعلومات"""
+    import yt_dlp
+
     output_template = f"downloads/{job_id}.%(ext)s"
+    url = f"https://www.youtube.com/watch?v={video_id}"
 
     ydl_opts = {
         'format': 'best[height<=720]/best',
         'outtmpl': output_template,
         'quiet': False,
-        'no_warnings': False,
-        'match_filter': yt_dlp.utils.match_filter_func('duration < 1200'),
         'extractor_args': {
             'youtube': {
                 'player_client': ['android'],
-                'player_skip': ['webpage', 'configs'],
             }
         },
         'http_headers': {
@@ -110,40 +167,20 @@ def _download_video(job_id: str, url: str):
         },
     }
 
-    # قراءة الـ Cookies من الملف المحلي (يُكتب تلقائياً من ENV عند البدء)
+    # إضافة الـ Cookies إذا وُجدت
     cookies_path = '/app/cookies.txt'
-    print(f"[DEBUG] Looking for cookies at: {cookies_path}")
-    print(f"[DEBUG] File exists: {os.path.exists(cookies_path)}")
     if os.path.exists(cookies_path):
-        size = os.path.getsize(cookies_path)
-        print(f"[DEBUG] Cookies file size: {size} bytes")
         ydl_opts['cookiefile'] = cookies_path
-        print(f"[✅] Using cookies from {cookies_path}")
-    else:
-        print("[⚠️] No cookies file found — trying env var directly")
-        cookies_content = os.environ.get('YOUTUBE_COOKIES', '')
-        if cookies_content:
-            with open(cookies_path, 'w') as f:
-                f.write(cookies_content)
-            ydl_opts['cookiefile'] = cookies_path
-            print(f"[✅] Cookies written from ENV directly")
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        duration = info.get('duration', 0)
-        title = info.get('title', 'video')
+        ydl.download([url])
 
-    # ابحث عن الملف الفعلي الذي تم تحميله
-    video_path = None
+    # ابحث عن الملف المُحمَّل
     for f in os.listdir('downloads'):
         if f.startswith(job_id) and '_audio' not in f and '_cookies' not in f:
-            video_path = f"downloads/{f}"
-            break
+            return f"downloads/{f}"
 
-    if not video_path:
-        raise RuntimeError("لم يتم العثور على الفيديو بعد التحميل")
-
-    return video_path, duration, title
+    raise RuntimeError("لم يتم العثور على الفيديو بعد التحميل")
 
 
 def _extract_audio(job_id: str, video_path: str) -> str:
