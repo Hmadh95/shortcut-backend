@@ -147,40 +147,60 @@ def _parse_duration(duration_str: str) -> float:
 
 
 def _download_video(job_id: str, video_id: str) -> str:
-    """تحميل الفيديو باستخدام yt-dlp مع YouTube Data API للمعلومات"""
-    import yt_dlp
+    """تحميل الفيديو عبر YT-API على RapidAPI"""
+    import urllib.request
 
-    output_template = f"downloads/{job_id}.%(ext)s"
-    url = f"https://www.youtube.com/watch?v={video_id}"
+    rapidapi_key = os.environ.get('RAPIDAPI_KEY', '')
+    if not rapidapi_key:
+        raise RuntimeError("RAPIDAPI_KEY غير موجود في المتغيرات")
 
-    ydl_opts = {
-        'format': 'best[height<=720]/best',
-        'outtmpl': output_template,
-        'quiet': False,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android'],
-            }
-        },
-        'http_headers': {
-            'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
-        },
+    # جلب رابط التحميل المباشر
+    api_url = "https://yt-api.p.rapidapi.com/dl"
+    headers = {
+        "X-RapidAPI-Key": rapidapi_key,
+        "X-RapidAPI-Host": "yt-api.p.rapidapi.com"
     }
+    params = {"id": video_id}
 
-    # إضافة الـ Cookies إذا وُجدت
-    cookies_path = '/app/cookies.txt'
-    if os.path.exists(cookies_path):
-        ydl_opts['cookiefile'] = cookies_path
+    print(f"[⬇️] Fetching download URL for video: {video_id}")
+    response = requests.get(api_url, headers=headers, params=params)
+    data = response.json()
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    if response.status_code != 200:
+        raise RuntimeError(f"فشل جلب رابط التحميل: {response.status_code} — {data}")
 
-    # ابحث عن الملف المُحمَّل
-    for f in os.listdir('downloads'):
-        if f.startswith(job_id) and '_audio' not in f and '_cookies' not in f:
-            return f"downloads/{f}"
+    # ابحث عن رابط mp4 بأفضل جودة
+    download_url = None
+    formats = data.get('formats', []) or data.get('adaptiveFormats', [])
 
-    raise RuntimeError("لم يتم العثور على الفيديو بعد التحميل")
+    for fmt in formats:
+        mime = fmt.get('mimeType', '')
+        if 'video/mp4' in mime and fmt.get('qualityLabel') in ['720p', '480p', '360p']:
+            download_url = fmt.get('url')
+            print(f"[✅] Found format: {fmt.get('qualityLabel')}")
+            break
+
+    if not download_url:
+        # جرب أي رابط متاح
+        for fmt in formats:
+            if fmt.get('url'):
+                download_url = fmt.get('url')
+                break
+
+    if not download_url:
+        raise RuntimeError(f"لم يتم العثور على رابط تحميل: {list(data.keys())}")
+
+    # تحميل الفيديو
+    video_path = f"downloads/{job_id}.mp4"
+    print(f"[⬇️] Downloading to {video_path}...")
+    urllib.request.urlretrieve(download_url, video_path)
+
+    size = os.path.getsize(video_path)
+    if size < 1000:
+        raise RuntimeError("الملف المُحمَّل فارغ أو تالف")
+
+    print(f"[✅] Downloaded: {size / 1024 / 1024:.1f} MB")
+    return video_path
 
 
 def _extract_audio(job_id: str, video_path: str) -> str:
