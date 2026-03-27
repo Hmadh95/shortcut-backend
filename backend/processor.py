@@ -148,52 +148,76 @@ def _parse_duration(duration_str: str) -> float:
 
 def _download_video(job_id: str, video_id: str) -> str:
     """تحميل الفيديو عبر YT-API على RapidAPI"""
-    import urllib.request
 
     rapidapi_key = os.environ.get('RAPIDAPI_KEY', '')
     if not rapidapi_key:
         raise RuntimeError("RAPIDAPI_KEY غير موجود في المتغيرات")
 
-    # جلب رابط التحميل المباشر
-    api_url = "https://yt-api.p.rapidapi.com/dl"
     headers = {
         "X-RapidAPI-Key": rapidapi_key,
         "X-RapidAPI-Host": "yt-api.p.rapidapi.com"
     }
-    params = {"id": video_id}
 
-    print(f"[⬇️] Fetching download URL for video: {video_id}")
-    response = requests.get(api_url, headers=headers, params=params)
+    # ── الخطوة 1: جلب معلومات الفيديو وروابط التحميل ──
+    print(f"[⬇️] Fetching video info for: {video_id}")
+    response = requests.get(
+        "https://yt-api.p.rapidapi.com/dl",
+        headers=headers,
+        params={"id": video_id, "cgeo": "US"}
+    )
+
+    print(f"[DEBUG] Status: {response.status_code}")
     data = response.json()
+    print(f"[DEBUG] Keys: {list(data.keys())}")
 
     if response.status_code != 200:
-        raise RuntimeError(f"فشل جلب رابط التحميل: {response.status_code} — {data}")
+        raise RuntimeError(f"API error {response.status_code}: {data}")
 
-    # ابحث عن رابط mp4 بأفضل جودة
+    # ── الخطوة 2: استخراج رابط التحميل ────────────────
     download_url = None
-    formats = data.get('formats', []) or data.get('adaptiveFormats', [])
+    quality_found = None
 
-    for fmt in formats:
+    # جرب formats أولاً
+    for fmt in data.get('formats', []):
         mime = fmt.get('mimeType', '')
-        if 'video/mp4' in mime and fmt.get('qualityLabel') in ['720p', '480p', '360p']:
-            download_url = fmt.get('url')
-            print(f"[✅] Found format: {fmt.get('qualityLabel')}")
+        quality = fmt.get('qualityLabel', '')
+        url = fmt.get('url', '')
+        if 'video/mp4' in mime and quality in ['360p', '480p', '720p'] and url:
+            download_url = url
+            quality_found = quality
+            print(f"[✅] Found format: {quality}")
             break
 
+    # جرب adaptiveFormats
     if not download_url:
-        # جرب أي رابط متاح
-        for fmt in formats:
-            if fmt.get('url'):
-                download_url = fmt.get('url')
+        for fmt in data.get('adaptiveFormats', []):
+            mime = fmt.get('mimeType', '')
+            url = fmt.get('url', '')
+            if 'video/mp4' in mime and url:
+                download_url = url
+                quality_found = fmt.get('qualityLabel', 'unknown')
+                print(f"[✅] Found adaptive format: {quality_found}")
                 break
 
     if not download_url:
-        raise RuntimeError(f"لم يتم العثور على رابط تحميل: {list(data.keys())}")
+        print(f"[DEBUG] Full response: {data}")
+        raise RuntimeError("لم يتم العثور على رابط تحميل في الاستجابة")
 
-    # تحميل الفيديو
+    # ── الخطوة 3: تحميل الفيديو مع headers ────────────
     video_path = f"downloads/{job_id}.mp4"
-    print(f"[⬇️] Downloading to {video_path}...")
-    urllib.request.urlretrieve(download_url, video_path)
+    print(f"[⬇️] Downloading {quality_found} to {video_path}...")
+
+    dl_response = requests.get(download_url, stream=True, timeout=120, headers={
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    })
+
+    if dl_response.status_code != 200:
+        raise RuntimeError(f"فشل التحميل: HTTP {dl_response.status_code}")
+
+    with open(video_path, 'wb') as f:
+        for chunk in dl_response.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
 
     size = os.path.getsize(video_path)
     if size < 1000:
