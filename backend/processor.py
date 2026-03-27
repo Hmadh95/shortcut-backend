@@ -147,84 +147,60 @@ def _parse_duration(duration_str: str) -> float:
 
 
 def _download_video(job_id: str, video_id: str) -> str:
-    """تحميل الفيديو عبر YT-API على RapidAPI"""
+    """تحميل الفيديو عبر Invidious — بديل مجاني لا يُحظر"""
+    import yt_dlp
 
-    rapidapi_key = os.environ.get('RAPIDAPI_KEY', '')
-    if not rapidapi_key:
-        raise RuntimeError("RAPIDAPI_KEY غير موجود في المتغيرات")
+    video_path = f"downloads/{job_id}.mp4"
 
-    headers = {
-        "X-RapidAPI-Key": rapidapi_key,
-        "X-RapidAPI-Host": "yt-api.p.rapidapi.com"
+    # قائمة بخوادم Invidious المجانية
+    invidious_instances = [
+        f"https://invidious.privacyredirect.com/watch?v={video_id}",
+        f"https://inv.nadeko.net/watch?v={video_id}",
+        f"https://invidious.nikkosphere.com/watch?v={video_id}",
+        f"https://iv.melmac.space/watch?v={video_id}",
+    ]
+
+    ydl_opts = {
+        'format': 'best[height<=480]/best',
+        'outtmpl': video_path,
+        'quiet': False,
+        'no_warnings': False,
     }
 
-    # ── الخطوة 1: جلب معلومات الفيديو وروابط التحميل ──
-    print(f"[⬇️] Fetching video info for: {video_id}")
-    response = requests.get(
-        "https://yt-api.p.rapidapi.com/dl",
-        headers=headers,
-        params={"id": video_id, "cgeo": "US"}
-    )
+    # جرب كل خادم Invidious
+    last_error = None
+    for instance_url in invidious_instances:
+        try:
+            print(f"[⬇️] Trying: {instance_url}")
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([instance_url])
+            if os.path.exists(video_path) and os.path.getsize(video_path) > 1000:
+                size = os.path.getsize(video_path) / 1024 / 1024
+                print(f"[✅] Downloaded: {size:.1f} MB")
+                return video_path
+        except Exception as e:
+            last_error = e
+            print(f"[⚠️] Failed: {e}")
+            continue
 
-    print(f"[DEBUG] Status: {response.status_code}")
-    data = response.json()
-    print(f"[DEBUG] Keys: {list(data.keys())}")
+    # إذا فشلت كل الخوادم، جرب YouTube مباشرة مع الـ cookies
+    print("[⬇️] Trying YouTube directly with cookies...")
+    ydl_opts['outtmpl'] = f"downloads/{job_id}.%(ext)s"
+    cookies_path = '/app/cookies.txt'
+    if os.path.exists(cookies_path):
+        ydl_opts['cookiefile'] = cookies_path
 
-    if response.status_code != 200:
-        raise RuntimeError(f"API error {response.status_code}: {data}")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
 
-    # ── الخطوة 2: استخراج رابط التحميل ────────────────
-    download_url = None
-    quality_found = None
+    # ابحث عن الملف
+    for f in os.listdir('downloads'):
+        if f.startswith(job_id) and '_audio' not in f:
+            path = f"downloads/{f}"
+            if os.path.getsize(path) > 1000:
+                return path
 
-    # جرب formats أولاً
-    for fmt in data.get('formats', []):
-        mime = fmt.get('mimeType', '')
-        quality = fmt.get('qualityLabel', '')
-        url = fmt.get('url', '')
-        if 'video/mp4' in mime and quality in ['360p', '480p', '720p'] and url:
-            download_url = url
-            quality_found = quality
-            print(f"[✅] Found format: {quality}")
-            break
-
-    # جرب adaptiveFormats
-    if not download_url:
-        for fmt in data.get('adaptiveFormats', []):
-            mime = fmt.get('mimeType', '')
-            url = fmt.get('url', '')
-            if 'video/mp4' in mime and url:
-                download_url = url
-                quality_found = fmt.get('qualityLabel', 'unknown')
-                print(f"[✅] Found adaptive format: {quality_found}")
-                break
-
-    if not download_url:
-        print(f"[DEBUG] Full response: {data}")
-        raise RuntimeError("لم يتم العثور على رابط تحميل في الاستجابة")
-
-    # ── الخطوة 3: تحميل الفيديو مع headers ────────────
-    video_path = f"downloads/{job_id}.mp4"
-    print(f"[⬇️] Downloading {quality_found} to {video_path}...")
-
-    dl_response = requests.get(download_url, stream=True, timeout=120, headers={
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    })
-
-    if dl_response.status_code != 200:
-        raise RuntimeError(f"فشل التحميل: HTTP {dl_response.status_code}")
-
-    with open(video_path, 'wb') as f:
-        for chunk in dl_response.iter_content(chunk_size=8192):
-            if chunk:
-                f.write(chunk)
-
-    size = os.path.getsize(video_path)
-    if size < 1000:
-        raise RuntimeError("الملف المُحمَّل فارغ أو تالف")
-
-    print(f"[✅] Downloaded: {size / 1024 / 1024:.1f} MB")
-    return video_path
+    raise RuntimeError(f"فشل تحميل الفيديو: {last_error}")
 
 
 def _extract_audio(job_id: str, video_path: str) -> str:
