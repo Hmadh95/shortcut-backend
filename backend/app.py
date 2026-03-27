@@ -12,7 +12,12 @@ from flask_cors import CORS
 from processor import process_video
 
 app = Flask(__name__)
-CORS(app, origins=["*"])
+
+CORS(app, resources={r"/api/*": {"origins": "*"}}, 
+     supports_credentials=False,
+     allow_headers=["Content-Type"],
+     methods=["GET", "POST", "DELETE", "OPTIONS"])
+
 jobs = {}
 
 # تحقق من المتغيرات عند البدء
@@ -20,6 +25,19 @@ cookies = os.environ.get('YOUTUBE_COOKIES')
 api_key = os.environ.get('YOUTUBE_API_KEY')
 print(f"[{'✅' if cookies else '⚠️'}] YOUTUBE_COOKIES: {'loaded' if cookies else 'NOT FOUND'}")
 print(f"[{'✅' if api_key else '⚠️'}] YOUTUBE_API_KEY: {'loaded' if api_key else 'NOT FOUND'}")
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS'
+    return response
+
+
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    return '', 204
 
 
 # ── Health Check ─────────────────────────────────────────────
