@@ -7,6 +7,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<style>
+  .editor-body { display:grid; grid-template-columns:1fr 300px; min-height:600px; }
+  .main-panel { display:flex; flex-direction:column; overflow:hidden; }
+  .tool-panel { flex:1; overflow-y:auto; }
+  .tool-panel.caption-panel { padding:0; }
+  .active-panel { display:flex !important; flex-direction:column; }
+  .caption-panel::-webkit-scrollbar { width:4px; }
+  .caption-panel::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  #phoneVideo { object-fit:cover; }
+  @media(max-width:900px) {
+    .editor-body { grid-template-columns:1fr; }
+    .preview-panel { display:flex !important; }
+  }
+</style>
 </head>
 <body>
 
@@ -106,85 +120,125 @@
     </div>
 
     <div class="editor-body">
-      <!-- Left: captions + timeline -->
+      <!-- Left: panels -->
       <div class="main-panel">
+
         <!-- Toolbar -->
         <div class="toolbar">
-          <button class="tool-btn active" onclick="setActive(this)">📝 نصوص</button>
-          <button class="tool-btn" onclick="setActive(this)">✂️ قطع</button>
-          <button class="tool-btn" onclick="setActive(this)">🎵 صوت</button>
-          <button class="tool-btn" onclick="setActive(this)">✨ تأثيرات</button>
-          <button class="tool-btn" onclick="setActive(this)">📐 حجم</button>
-          <button class="tool-btn" onclick="setActive(this)">🎨 مرشحات</button>
+          <button class="tool-btn active" onclick="switchPanel(this,'panel-captions')">📝 نصوص</button>
+          <button class="tool-btn" onclick="switchPanel(this,'panel-cut')">✂️ قطع</button>
+          <button class="tool-btn" onclick="switchPanel(this,'panel-audio')">🎵 صوت</button>
+          <button class="tool-btn" onclick="switchPanel(this,'panel-effects')">✨ تأثيرات</button>
+          <button class="tool-btn" onclick="switchPanel(this,'panel-size')">📐 حجم</button>
+          <button class="tool-btn" onclick="switchPanel(this,'panel-filters')">🎨 مرشحات</button>
         </div>
 
-        <!-- Captions -->
-        <div class="caption-panel">
-          <div class="caption-item active" onclick="selectCaption(this)">
-            <div class="caption-time">0:00 – 0:08</div>
-            <div class="caption-text">
-              <span class="word key emoji">الذكاء الاصطناعي</span>
-              <span class="word"> غيّر قواعد </span>
-              <span class="word key">اللعبة</span>
-              <span class="word"> في مجال التكنولوجيا</span>
-            </div>
+        <!-- Panel: نصوص -->
+        <div id="panel-captions" class="tool-panel caption-panel active-panel">
+          <div style="padding:12px;color:var(--text-muted);font-size:13px;text-align:center">
+            أدخل رابط فيديو وابدأ التحويل لرؤية النصوص هنا
           </div>
-          <div class="caption-item" onclick="selectCaption(this)">
-            <div class="caption-time">0:08 – 0:19</div>
-            <div class="caption-text">
-              <span class="word">اليوم سنتحدث عن </span>
-              <span class="word key">أكبر خمسة</span>
-              <span class="word"> اتجاهات في عالم </span>
-              <span class="word key emoji">التقنية</span>
-              <span class="word"> لعام 2024</span>
-            </div>
+        </div>
+
+        <!-- Panel: قطع -->
+        <div id="panel-cut" class="tool-panel" style="display:none;padding:16px;overflow-y:auto">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">اختر الكليب</div>
+          <div id="cut-clips-list"></div>
+          <div style="margin-top:16px;font-size:12px;color:var(--text-muted)">
+            اضغط على أي كليب لتحديده وتحميله
           </div>
-          <div class="caption-item" onclick="selectCaption(this)">
-            <div class="caption-time">0:19 – 0:31</div>
-            <div class="caption-text">
-              <span class="word">أولاً: نماذج اللغة الكبيرة أصبحت </span>
-              <span class="word key">في كل مكان</span>
-              <span class="word"> وبدأت تتكامل مع</span>
-              <span class="word key"> تطبيقاتنا اليومية</span>
-            </div>
+        </div>
+
+        <!-- Panel: صوت -->
+        <div id="panel-audio" class="tool-panel" style="display:none;padding:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:16px">إعدادات الصوت</div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px">مستوى الصوت</label>
+            <input type="range" min="0" max="100" value="80" style="width:100%;accent-color:var(--accent)"
+              oninput="document.getElementById('vol-val').textContent=this.value+'%'">
+            <span id="vol-val" style="font-size:12px;color:var(--accent)">80%</span>
           </div>
-          <div class="caption-item" onclick="selectCaption(this)">
-            <div class="caption-time">0:31 – 0:45</div>
-            <div class="caption-text">
-              <span class="word">ثانياً: الحوسبة الكمية أصبحت </span>
-              <span class="word key emoji">أقرب من أي وقت</span>
-              <span class="word"> مضى من التطبيق الفعلي</span>
-            </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px">إزالة الضوضاء</label>
+            <button class="effect-chip active" onclick="this.classList.toggle('active');this.textContent=this.classList.contains('active')?'✅ مفعّل':'تفعيل'">✅ مفعّل</button>
           </div>
-          <div class="caption-item" onclick="selectCaption(this)">
-            <div class="caption-time">0:45 – 0:58</div>
-            <div class="caption-text">
-              <span class="word">ثالثاً: الروبوتات الذكية ستدخل </span>
-              <span class="word key">المنازل والمصانع</span>
-              <span class="word"> خلال </span>
-              <span class="word key emoji">السنوات الثلاث القادمة</span>
+          <div>
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px">سرعة التشغيل</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="effect-chip" onclick="setSpeed(this,0.75)">0.75x</button>
+              <button class="effect-chip active" onclick="setSpeed(this,1)">1x</button>
+              <button class="effect-chip" onclick="setSpeed(this,1.25)">1.25x</button>
+              <button class="effect-chip" onclick="setSpeed(this,1.5)">1.5x</button>
             </div>
           </div>
         </div>
 
-        <!-- Style controls -->
+        <!-- Panel: تأثيرات -->
+        <div id="panel-effects" class="tool-panel" style="display:none;padding:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:16px">تأثيرات النص</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+            <button class="effect-chip active" onclick="toggleEffect(this,'fade')">ظهور تدريجي</button>
+            <button class="effect-chip" onclick="toggleEffect(this,'bounce')">ارتداد</button>
+            <button class="effect-chip" onclick="toggleEffect(this,'glow')">توهج</button>
+            <button class="effect-chip" onclick="toggleEffect(this,'shadow')">ظل</button>
+            <button class="effect-chip" onclick="toggleEffect(this,'outline')">إطار</button>
+          </div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">إيموجي تلقائي</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="effect-chip active" onclick="this.classList.toggle('active')">🔥 على الكلمات المهمة</button>
+            <button class="effect-chip" onclick="this.classList.toggle('active')">⭐ على العناوين</button>
+            <button class="effect-chip" onclick="this.classList.toggle('active')">💡 على الأفكار</button>
+          </div>
+        </div>
+
+        <!-- Panel: حجم -->
+        <div id="panel-size" class="tool-panel" style="display:none;padding:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:16px">حجم النص</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <button class="size-btn" onclick="changeSize(-2)">−</button>
+            <span id="font-size-val" style="font-size:20px;font-weight:700;color:var(--accent);min-width:40px;text-align:center">32</span>
+            <button class="size-btn" onclick="changeSize(2)">+</button>
+            <span style="font-size:12px;color:var(--text-muted)">px</span>
+          </div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">نسبة الفيديو</div>
+          <div style="display:flex;gap:8px">
+            <button class="effect-chip active" onclick="setRatio(this,'9:16')">9:16 Shorts</button>
+            <button class="effect-chip" onclick="setRatio(this,'1:1')">1:1 مربع</button>
+            <button class="effect-chip" onclick="setRatio(this,'16:9')">16:9 أفقي</button>
+          </div>
+        </div>
+
+        <!-- Panel: مرشحات -->
+        <div id="panel-filters" class="tool-panel" style="display:none;padding:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:16px">مرشحات الألوان</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+            <button onclick="applyFilter(this,'none')" style="height:60px;border-radius:8px;border:2px solid var(--accent);background:linear-gradient(135deg,#667eea,#764ba2);cursor:pointer;font-size:11px;color:#fff;font-weight:700">أصلي</button>
+            <button onclick="applyFilter(this,'grayscale')" style="height:60px;border-radius:8px;border:1px solid var(--border);background:linear-gradient(135deg,#888,#444);cursor:pointer;font-size:11px;color:#fff;font-weight:700">أبيض وأسود</button>
+            <button onclick="applyFilter(this,'warm')" style="height:60px;border-radius:8px;border:1px solid var(--border);background:linear-gradient(135deg,#f59e0b,#ef4444);cursor:pointer;font-size:11px;color:#fff;font-weight:700">دافئ</button>
+            <button onclick="applyFilter(this,'cool')" style="height:60px;border-radius:8px;border:1px solid var(--border);background:linear-gradient(135deg,#00e5ff,#7c3aed);cursor:pointer;font-size:11px;color:#fff;font-weight:700">بارد</button>
+            <button onclick="applyFilter(this,'bright')" style="height:60px;border-radius:8px;border:1px solid var(--border);background:linear-gradient(135deg,#fff9,#fffc);cursor:pointer;font-size:11px;color:#333;font-weight:700">مضيء</button>
+            <button onclick="applyFilter(this,'dramatic')" style="height:60px;border-radius:8px;border:1px solid var(--border);background:linear-gradient(135deg,#000,#333);cursor:pointer;font-size:11px;color:#fff;font-weight:700">دراماتيكي</button>
+          </div>
+        </div>
+
+        <!-- Style controls (نصوص) -->
         <div class="style-panel">
           <span class="style-label">الخط:</span>
-          <select class="font-select">
-            <option>Cairo Bold</option>
-            <option>Impact</option>
-            <option>Montserrat</option>
+          <select class="font-select" onchange="applyFont(this.value)">
+            <option value="Cairo">Cairo</option>
+            <option value="Impact">Impact</option>
+            <option value="Arial Black">Arial Black</option>
           </select>
           <span class="style-label">اللون:</span>
-          <div class="color-swatch active" style="background:#ffffff" onclick="setColor(this)"></div>
-          <div class="color-swatch" style="background:#00e5ff" onclick="setColor(this)"></div>
-          <div class="color-swatch" style="background:#f59e0b" onclick="setColor(this)"></div>
-          <div class="color-swatch" style="background:#ef4444" onclick="setColor(this)"></div>
-          <div class="color-swatch" style="background:#22c55e" onclick="setColor(this)"></div>
+          <div class="color-swatch active" style="background:#ffffff" onclick="applyColor(this,'#ffffff')"></div>
+          <div class="color-swatch" style="background:#00e5ff" onclick="applyColor(this,'#00e5ff')"></div>
+          <div class="color-swatch" style="background:#f59e0b" onclick="applyColor(this,'#f59e0b')"></div>
+          <div class="color-swatch" style="background:#ef4444" onclick="applyColor(this,'#ef4444')"></div>
+          <div class="color-swatch" style="background:#22c55e" onclick="applyColor(this,'#22c55e')"></div>
           <span class="style-label">الحجم:</span>
           <div class="size-ctrl">
-            <button class="size-btn">−</button>
-            <button class="size-btn">+</button>
+            <button class="size-btn" onclick="changeSize(-2)">−</button>
+            <button class="size-btn" onclick="changeSize(2)">+</button>
           </div>
           <button class="effect-chip active" onclick="this.classList.toggle('active')">ظهور</button>
           <button class="effect-chip" onclick="this.classList.toggle('active')">توهج</button>
@@ -194,19 +248,12 @@
         <!-- Timeline -->
         <div class="timeline">
           <div style="position:relative">
-            <div class="timeline-ruler" id="timeline">
-              <!-- Filled by JS -->
-            </div>
+            <div class="timeline-ruler" id="timeline"></div>
             <div class="timeline-handle" id="handle"></div>
           </div>
           <div class="timeline-labels">
-            <span>0:00</span>
-            <span>0:10</span>
-            <span>0:20</span>
-            <span>0:30</span>
-            <span>0:40</span>
-            <span>0:50</span>
-            <span>1:00</span>
+            <span>0:00</span><span>0:10</span><span>0:20</span>
+            <span>0:30</span><span>0:40</span><span>0:50</span><span>1:00</span>
           </div>
         </div>
       </div>
@@ -215,27 +262,27 @@
       <div class="preview-panel">
         <div class="phone-frame">
           <div class="phone-notch"></div>
-          <div class="phone-screen">
-            <div class="phone-video-bg"></div>
-            <div class="phone-play-btn">▶</div>
-            <div class="phone-caption">
-              <span>
-                <span class="highlight">الذكاء الاصطناعي 🔥</span><br>
-                غيّر قواعد اللعبة
+          <div class="phone-screen" id="phoneScreen">
+            <div class="phone-video-bg" id="phoneBg"></div>
+            <video id="phoneVideo" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none" controls></video>
+            <div class="phone-play-btn" id="phonePlayBtn" onclick="playPhoneVideo()">▶</div>
+            <div class="phone-caption" id="phoneCaption">
+              <span id="phoneCaptionText">
+                <span class="highlight">أدخل رابط فيديو</span><br>لبدء التحويل
               </span>
             </div>
           </div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">معاينة 9:16</div>
-          <div style="display:flex; gap:8px; justify-content:center;">
-            <button class="editor-btn" style="font-size:11px; padding:5px 10px">◀ السابق</button>
-            <button class="editor-btn" style="font-size:11px; padding:5px 10px">التالي ▶</button>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">معاينة 9:16</div>
+          <div style="display:flex;gap:8px;justify-content:center">
+            <button class="editor-btn" style="font-size:11px;padding:5px 10px" onclick="navigateClip(-1)">◀ السابق</button>
+            <button class="editor-btn" style="font-size:11px;padding:5px 10px" onclick="navigateClip(1)">التالي ▶</button>
           </div>
         </div>
-        <div style="background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px; width:100%;">
-          <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px; font-weight:700;">AI اقترح 3 لقطات</div>
-          <div id="aiClips"></div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;width:100%">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-weight:700">🤖 AI اقترح لقطات</div>
+          <div id="aiClips"><div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">في انتظار التحويل...</div></div>
         </div>
       </div>
     </div>
@@ -535,10 +582,11 @@
     updateCaptionPanel(clips);
   }
 
-  // ── اختيار كليب من القائمة ────────────────────────────────
+  // ── اختيار كليب ───────────────────────────────────────────
   function selectClip(index) {
     selectedClipIndex = index;
     updatePhonePreview(index);
+    updateCutPanel();
     showNotif(`تم اختيار Short ${index + 1}`);
   }
 
@@ -547,20 +595,53 @@
     if (!currentClips.length) return;
     const clip = currentClips[index];
 
-    // تحديث النص في الهاتف
-    const caption = document.querySelector('.phone-caption span');
-    if (caption && clip.text) {
+    // تحديث النص
+    const captionText = document.getElementById('phoneCaptionText');
+    if (captionText && clip.text) {
       const words = clip.text.split(' ');
-      const first = words.slice(0, 4).join(' ');
-      const rest  = words.slice(4, 8).join(' ');
-      caption.innerHTML = `<span class="highlight">${first}</span>${rest ? '<br>' + rest : ''}`;
+      captionText.innerHTML = `<span class="highlight">${words.slice(0,3).join(' ')}</span><br>${words.slice(3,7).join(' ')}`;
     }
 
-    // تحديث زري السابق والتالي
-    const prevBtn = document.querySelector('.preview-panel .editor-btn:first-child');
-    const nextBtn = document.querySelector('.preview-panel .editor-btn:last-child');
-    if (prevBtn) prevBtn.onclick = () => { if (selectedClipIndex > 0) selectClip(selectedClipIndex - 1); };
-    if (nextBtn) nextBtn.onclick = () => { if (selectedClipIndex < currentClips.length - 1) selectClip(selectedClipIndex + 1); };
+    // تحديث الفيديو في الهاتف
+    const video = document.getElementById('phoneVideo');
+    const playBtn = document.getElementById('phonePlayBtn');
+    const bg = document.getElementById('phoneBg');
+    if (video) {
+      video.src = `${BACKEND_URL}${clip.download}`;
+      video.style.display = 'block';
+      video.style.filter = editorSettings.filter !== 'none' ?
+        { grayscale:'grayscale(100%)', warm:'sepia(50%) saturate(150%)',
+          cool:'hue-rotate(180deg)', bright:'brightness(130%)', dramatic:'contrast(150%) brightness(80%)' }[editorSettings.filter] || 'none' : 'none';
+      if (bg) bg.style.display = 'none';
+      if (playBtn) playBtn.style.display = 'flex';
+      video.pause();
+    }
+  }
+
+  // ── حفظ المسودة ───────────────────────────────────────────
+  function saveClips() {
+    if (!currentClips.length) { showNotif('⚠️ لا يوجد محتوى للحفظ بعد', true); return; }
+    localStorage.setItem('shortcut_draft', JSON.stringify({ clips: currentClips, settings: editorSettings, savedAt: new Date().toISOString() }));
+    showNotif('✅ تم حفظ المسودة محلياً');
+  }
+
+  // ── تحميل الكليب الحالي ───────────────────────────────────
+  function downloadCurrentClip() {
+    if (!currentClips.length) { showNotif('⚠️ لا يوجد فيديو للتحميل بعد', true); return; }
+    const clip = currentClips[selectedClipIndex];
+    const a = document.createElement('a');
+    a.href = `${BACKEND_URL}${clip.download}`;
+    a.download = `short_${selectedClipIndex + 1}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showNotif(`⬇️ جارٍ تحميل Short ${selectedClipIndex + 1}...`);
+  }
+
+  // ── معاينة الكليب ─────────────────────────────────────────
+  function previewClip() {
+    if (!currentClips.length) { showNotif('⚠️ لا يوجد فيديو للمعاينة', true); return; }
+    playPhoneVideo();
   }
 
   // ── تحديث لوحة النصوص بالبيانات الحقيقية ─────────────────
@@ -629,49 +710,143 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  // ── متغيرات المحرر ────────────────────────────────────────
-  let currentClips = [];
-  let selectedClipIndex = 0;
+  // ── إعدادات المحرر ────────────────────────────────────────
+  let editorSettings = { fontSize: 32, color: '#ffffff', font: 'Cairo', filter: 'none', speed: 1 };
 
-  // ── حفظ المسودة ───────────────────────────────────────────
-  function saveClips() {
-    if (!currentClips.length) {
-      showNotif('⚠️ لا يوجد محتوى للحفظ بعد', true);
-      return;
-    }
-    localStorage.setItem('shortcut_draft', JSON.stringify({
-      clips: currentClips,
-      savedAt: new Date().toISOString()
-    }));
-    showNotif('✅ تم حفظ المسودة محلياً');
+  // ── تبديل الـ Panels ──────────────────────────────────────
+  function switchPanel(btn, panelId) {
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tool-panel').forEach(p => p.style.display = 'none');
+    const panel = document.getElementById(panelId);
+    if (panel) panel.style.display = 'flex', panel.style.flexDirection = 'column';
+
+    // تحديث قائمة الكليبات في panel-cut
+    if (panelId === 'panel-cut') updateCutPanel();
   }
 
-  // ── معاينة الكليب الحالي ──────────────────────────────────
-  function previewClip() {
+  // ── تحديث panel القطع ─────────────────────────────────────
+  function updateCutPanel() {
+    const list = document.getElementById('cut-clips-list');
+    if (!list) return;
     if (!currentClips.length) {
-      showNotif('⚠️ لا يوجد فيديو للمعاينة بعد', true);
+      list.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">لا توجد كليبات بعد</div>';
       return;
     }
-    const clip = currentClips[selectedClipIndex];
-    const url = `${BACKEND_URL}${clip.download}`;
-    window.open(url, '_blank');
+    list.innerHTML = '';
+    const colors = ['#00e5ff', '#f59e0b', '#22c55e'];
+    currentClips.forEach((clip, i) => {
+      const el = document.createElement('div');
+      el.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:10px;margin-bottom:8px;background:${i===selectedClipIndex?'rgba(0,229,255,0.1)':'var(--surface2)'};border:1px solid ${i===selectedClipIndex?'var(--accent)':'var(--border)'};cursor:pointer`;
+      el.innerHTML = `
+        <div>
+          <div style="font-size:12px;font-weight:700;color:${colors[i%3]}">Short ${i+1}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${formatTime(clip.start)} – ${formatTime(clip.end)}</div>
+        </div>
+        <a href="${BACKEND_URL}${clip.download}" download="short_${i+1}.mp4"
+           style="background:var(--accent);color:#000;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;cursor:pointer">⬇️ تحميل</a>
+      `;
+      el.onclick = (e) => { if(e.target.tagName!=='A') selectClip(i); };
+      list.appendChild(el);
+    });
   }
 
-  // ── تحميل الكليب الحالي ───────────────────────────────────
-  function downloadCurrentClip() {
-    if (!currentClips.length) {
-      showNotif('⚠️ لا يوجد فيديو للتحميل بعد', true);
+  // ── تطبيق الخط ────────────────────────────────────────────
+  function applyFont(font) {
+    editorSettings.font = font;
+    document.querySelectorAll('.caption-text').forEach(el => el.style.fontFamily = font);
+    const caption = document.getElementById('phoneCaptionText');
+    if (caption) caption.style.fontFamily = font;
+    showNotif(`✅ تم تطبيق الخط: ${font}`);
+  }
+
+  // ── تطبيق اللون ───────────────────────────────────────────
+  function applyColor(swatch, color) {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+    swatch.classList.add('active');
+    editorSettings.color = color;
+    document.querySelectorAll('.caption-text').forEach(el => el.style.color = color);
+    const caption = document.getElementById('phoneCaptionText');
+    if (caption) caption.style.color = color;
+    showNotif(`✅ تم تطبيق اللون`);
+  }
+
+  // ── تغيير حجم الخط ────────────────────────────────────────
+  function changeSize(delta) {
+    editorSettings.fontSize = Math.max(16, Math.min(64, editorSettings.fontSize + delta));
+    const val = document.getElementById('font-size-val');
+    if (val) val.textContent = editorSettings.fontSize;
+    document.querySelectorAll('.caption-text').forEach(el => el.style.fontSize = editorSettings.fontSize * 0.4 + 'px');
+    const caption = document.getElementById('phoneCaptionText');
+    if (caption) caption.style.fontSize = editorSettings.fontSize * 0.3 + 'px';
+  }
+
+  // ── تطبيق مرشح ────────────────────────────────────────────
+  function applyFilter(btn, filter) {
+    document.querySelectorAll('#panel-filters button').forEach(b => b.style.border = '1px solid var(--border)');
+    btn.style.border = '2px solid var(--accent)';
+    editorSettings.filter = filter;
+    const bg = document.getElementById('phoneBg');
+    const video = document.getElementById('phoneVideo');
+    const filters = {
+      none: 'none', grayscale: 'grayscale(100%)', warm: 'sepia(50%) saturate(150%)',
+      cool: 'hue-rotate(180deg) saturate(120%)', bright: 'brightness(130%)', dramatic: 'contrast(150%) brightness(80%)'
+    };
+    const f = filters[filter] || 'none';
+    if (bg) bg.style.filter = f;
+    if (video) video.style.filter = f;
+    showNotif(`✅ تم تطبيق المرشح: ${btn.textContent}`);
+  }
+
+  // ── تفعيل/إلغاء تأثير ─────────────────────────────────────
+  function toggleEffect(btn, effect) {
+    btn.classList.toggle('active');
+    showNotif(`${btn.classList.contains('active') ? '✅' : '❌'} تأثير ${btn.textContent}`);
+  }
+
+  // ── ضبط سرعة التشغيل ──────────────────────────────────────
+  function setSpeed(btn, speed) {
+    document.querySelectorAll('#panel-audio .effect-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    editorSettings.speed = speed;
+    const video = document.getElementById('phoneVideo');
+    if (video) video.playbackRate = speed;
+    showNotif(`✅ سرعة التشغيل: ${speed}x`);
+  }
+
+  // ── ضبط نسبة الفيديو ──────────────────────────────────────
+  function setRatio(btn, ratio) {
+    document.querySelectorAll('#panel-size .effect-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    showNotif(`✅ تم ضبط النسبة: ${ratio}`);
+  }
+
+  // ── تشغيل الفيديو في الهاتف ───────────────────────────────
+  function playPhoneVideo() {
+    const video = document.getElementById('phoneVideo');
+    const playBtn = document.getElementById('phonePlayBtn');
+    if (!video.src) {
+      showNotif('⚠️ لا يوجد فيديو للمعاينة', true);
       return;
     }
-    const clip = currentClips[selectedClipIndex];
-    const url = `${BACKEND_URL}${clip.download}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `short_${selectedClipIndex + 1}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showNotif(`⬇️ جارٍ تحميل Short ${selectedClipIndex + 1}...`);
+    if (video.style.display === 'none') {
+      video.style.display = 'block';
+      document.getElementById('phoneBg').style.display = 'none';
+    }
+    if (video.paused) {
+      video.play();
+      if (playBtn) playBtn.style.display = 'none';
+    } else {
+      video.pause();
+      if (playBtn) playBtn.style.display = 'flex';
+    }
+  }
+
+  // ── التنقل بين الكليبات ────────────────────────────────────
+  function navigateClip(dir) {
+    if (!currentClips.length) { showNotif('⚠️ لا توجد كليبات بعد', true); return; }
+    const newIndex = selectedClipIndex + dir;
+    if (newIndex >= 0 && newIndex < currentClips.length) selectClip(newIndex);
   }
   const timelineSegments = [
     { label: 'مقدمة',      width: 120, color: '#7c3aed33', border: '#7c3aed' },
