@@ -97,11 +97,11 @@
         <div class="dot dot-yellow"></div>
         <div class="dot dot-green"></div>
       </div>
-      <div class="editor-title">محرر Shorts — فيديو_تقنية_2024.mp4</div>
+      <div class="editor-title" id="editorTitle">محرر Shorts — في انتظار الفيديو...</div>
       <div class="editor-actions">
-        <button class="editor-btn" onclick="showNotif('تم حفظ المسودة ✓')">حفظ</button>
-        <button class="editor-btn" onclick="showNotif('جارٍ معالجة الفيديو…')">معاينة</button>
-        <button class="editor-btn primary" onclick="showNotif('تم التحميل بنجاح! 🎉')">تحميل</button>
+        <button class="editor-btn" onclick="saveClips()">حفظ</button>
+        <button class="editor-btn" onclick="previewClip()">معاينة</button>
+        <button class="editor-btn primary" id="downloadBtn" onclick="downloadCurrentClip()">تحميل</button>
       </div>
     </div>
 
@@ -478,6 +478,17 @@
 
   // ── عرض نتائج الـ Shorts ──────────────────────────────────
   function renderResults(clips, title) {
+    // حفظ الكليبات للاستخدام في المحرر
+    currentClips = clips;
+    selectedClipIndex = 0;
+
+    // تحديث عنوان المحرر
+    const editorTitle = document.getElementById('editorTitle');
+    if (editorTitle) editorTitle.textContent = `محرر Shorts — ${title || 'فيديو'}`;
+
+    // تحديث معاينة الهاتف بالفيديو الأول
+    updatePhonePreview(0);
+
     const container = document.getElementById('aiClips');
     container.innerHTML = '';
 
@@ -492,12 +503,10 @@
       const scoreVal = Math.round((clip.score || 0.8) * 100);
 
       const el = document.createElement('div');
-      el.style.cssText = `
-        padding: 10px 0;
-        border-bottom: ${i < clips.length - 1 ? '1px solid var(--border)' : 'none'};
-      `;
+      el.style.cssText = `padding:10px 0;border-bottom:${i < clips.length - 1 ? '1px solid var(--border)' : 'none'};cursor:pointer;`;
       el.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"
+             onclick="selectClip(${i})">
           <div>
             <div style="font-size:11px;font-weight:700;color:${color}">${label}</div>
             <div style="font-size:10px;color:var(--text-muted)">${start} – ${end} · ${clip.duration}ث</div>
@@ -509,6 +518,7 @@
         ${clip.text ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;direction:rtl">"${clip.text.slice(0, 80)}${clip.text.length > 80 ? '...' : ''}"</div>` : ''}
         <a href="${BACKEND_URL}${clip.download}"
            download="short_${i+1}.mp4"
+           onclick="selectedClipIndex=${i}"
            style="display:inline-flex;align-items:center;gap:6px;background:${color}18;
                   border:1px solid ${color}55;color:${color};border-radius:8px;
                   padding:5px 12px;font-size:11px;font-weight:700;
@@ -523,6 +533,34 @@
 
     // تحديث النصوص في محرر الـ Captions
     updateCaptionPanel(clips);
+  }
+
+  // ── اختيار كليب من القائمة ────────────────────────────────
+  function selectClip(index) {
+    selectedClipIndex = index;
+    updatePhonePreview(index);
+    showNotif(`تم اختيار Short ${index + 1}`);
+  }
+
+  // ── تحديث معاينة الهاتف ───────────────────────────────────
+  function updatePhonePreview(index) {
+    if (!currentClips.length) return;
+    const clip = currentClips[index];
+
+    // تحديث النص في الهاتف
+    const caption = document.querySelector('.phone-caption span');
+    if (caption && clip.text) {
+      const words = clip.text.split(' ');
+      const first = words.slice(0, 4).join(' ');
+      const rest  = words.slice(4, 8).join(' ');
+      caption.innerHTML = `<span class="highlight">${first}</span>${rest ? '<br>' + rest : ''}`;
+    }
+
+    // تحديث زري السابق والتالي
+    const prevBtn = document.querySelector('.preview-panel .editor-btn:first-child');
+    const nextBtn = document.querySelector('.preview-panel .editor-btn:last-child');
+    if (prevBtn) prevBtn.onclick = () => { if (selectedClipIndex > 0) selectClip(selectedClipIndex - 1); };
+    if (nextBtn) nextBtn.onclick = () => { if (selectedClipIndex < currentClips.length - 1) selectClip(selectedClipIndex + 1); };
   }
 
   // ── تحديث لوحة النصوص بالبيانات الحقيقية ─────────────────
@@ -591,7 +629,50 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  // ── Timeline (ديكور) ───────────────────────────────────────
+  // ── متغيرات المحرر ────────────────────────────────────────
+  let currentClips = [];
+  let selectedClipIndex = 0;
+
+  // ── حفظ المسودة ───────────────────────────────────────────
+  function saveClips() {
+    if (!currentClips.length) {
+      showNotif('⚠️ لا يوجد محتوى للحفظ بعد', true);
+      return;
+    }
+    localStorage.setItem('shortcut_draft', JSON.stringify({
+      clips: currentClips,
+      savedAt: new Date().toISOString()
+    }));
+    showNotif('✅ تم حفظ المسودة محلياً');
+  }
+
+  // ── معاينة الكليب الحالي ──────────────────────────────────
+  function previewClip() {
+    if (!currentClips.length) {
+      showNotif('⚠️ لا يوجد فيديو للمعاينة بعد', true);
+      return;
+    }
+    const clip = currentClips[selectedClipIndex];
+    const url = `${BACKEND_URL}${clip.download}`;
+    window.open(url, '_blank');
+  }
+
+  // ── تحميل الكليب الحالي ───────────────────────────────────
+  function downloadCurrentClip() {
+    if (!currentClips.length) {
+      showNotif('⚠️ لا يوجد فيديو للتحميل بعد', true);
+      return;
+    }
+    const clip = currentClips[selectedClipIndex];
+    const url = `${BACKEND_URL}${clip.download}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `short_${selectedClipIndex + 1}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showNotif(`⬇️ جارٍ تحميل Short ${selectedClipIndex + 1}...`);
+  }
   const timelineSegments = [
     { label: 'مقدمة',      width: 120, color: '#7c3aed33', border: '#7c3aed' },
     { label: 'Short 1 ⭐', width: 160, color: '#00e5ff22', border: '#00e5ff', selected: true },
