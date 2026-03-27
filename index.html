@@ -142,11 +142,69 @@
         </div>
 
         <!-- Panel: قطع -->
-        <div id="panel-cut" class="tool-panel" style="display:none;padding:16px;overflow-y:auto">
-          <div style="font-size:13px;font-weight:700;margin-bottom:12px">اختر الكليب</div>
+        <div id="panel-cut" class="tool-panel" style="display:none;padding:16px;overflow-y:auto;flex-direction:column;gap:12px">
+          <div style="font-size:13px;font-weight:700">✂️ قطع الفيديو</div>
+
+          <!-- Clip selector -->
           <div id="cut-clips-list"></div>
-          <div style="margin-top:16px;font-size:12px;color:var(--text-muted)">
-            اضغط على أي كليب لتحديده وتحميله
+
+          <!-- Trim controls -->
+          <div id="trim-controls" style="display:none">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">اسحب للتحديد أو اكتب القيم يدوياً</div>
+
+            <!-- Visual trim bar -->
+            <div id="trimBar" style="position:relative;height:48px;background:var(--surface2);border-radius:10px;margin-bottom:12px;border:1px solid var(--border);overflow:hidden;cursor:pointer"
+                 onmousedown="startTrimDrag(event)" ontouchstart="startTrimDrag(event)">
+              <div id="trimFill" style="position:absolute;top:0;height:100%;background:rgba(0,229,255,0.25);border:2px solid var(--accent)"></div>
+              <div id="trimHandleL" style="position:absolute;top:0;width:16px;height:100%;background:var(--accent);cursor:ew-resize;border-radius:6px 0 0 6px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#000;font-weight:700">◀</div>
+              <div id="trimHandleR" style="position:absolute;top:0;width:16px;height:100%;background:var(--accent);cursor:ew-resize;border-radius:0 6px 6px 0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#000;font-weight:700">▶</div>
+              <div id="trimPlayhead" style="position:absolute;top:0;width:2px;height:100%;background:#ef4444;pointer-events:none"></div>
+            </div>
+
+            <!-- Time inputs -->
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+              <div style="flex:1">
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">البداية</div>
+                <input id="trimStartInput" type="number" min="0" step="0.1" value="0"
+                  style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;font-size:13px;font-family:'Space Mono',monospace"
+                  oninput="updateTrimFromInputs()">
+              </div>
+              <div style="font-size:18px;color:var(--text-muted);padding-top:16px">→</div>
+              <div style="flex:1">
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">النهاية</div>
+                <input id="trimEndInput" type="number" min="0" step="0.1" value="45"
+                  style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;font-size:13px;font-family:'Space Mono',monospace"
+                  oninput="updateTrimFromInputs()">
+              </div>
+              <div style="flex:1">
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">المدة</div>
+                <div id="trimDuration" style="background:var(--surface2);border:1px solid var(--border);padding:6px 10px;border-radius:8px;font-size:13px;font-family:'Space Mono',monospace;color:var(--accent)">45.0ث</div>
+              </div>
+            </div>
+
+            <!-- نسبة الفيديو هنا أيضاً -->
+            <div style="margin-bottom:12px">
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">نسبة الفيديو</div>
+              <div style="display:flex;gap:6px">
+                <button class="effect-chip active" id="ratio-916" onclick="selectRatio(this,'9:16')">9:16 Shorts</button>
+                <button class="effect-chip" id="ratio-11" onclick="selectRatio(this,'1:1')">1:1</button>
+                <button class="effect-chip" id="ratio-169" onclick="selectRatio(this,'16:9')">16:9</button>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <button onclick="applyTrimAndDownload()"
+              style="width:100%;background:linear-gradient(135deg,var(--accent),#00b8d9);color:#000;border:none;padding:12px;border-radius:10px;font-family:'Cairo',sans-serif;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px">
+              🎬 قطع وتحميل
+            </button>
+            <button onclick="previewTrim()"
+              style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:10px;border-radius:10px;font-family:'Cairo',sans-serif;font-weight:600;font-size:13px;cursor:pointer">
+              ▶ معاينة القطعة
+            </button>
+          </div>
+
+          <div id="cut-empty" style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px">
+            أدخل رابط فيديو وابدأ التحويل أولاً
           </div>
         </div>
 
@@ -765,12 +823,171 @@
     if (panelId === 'panel-cut') updateCutPanel();
   }
 
-  // ── تحديث panel القطع ─────────────────────────────────────
+  // ── إعدادات الـ Trim ───────────────────────────────────────
+  let trimState = { start: 0, end: 45, duration: 45, dragging: null, ratio: '9:16' };
+
+  function selectRatio(btn, ratio) {
+    document.querySelectorAll('#panel-cut .effect-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    trimState.ratio = ratio;
+    // مزامنة مع panel-size أيضاً
+    editorSettings.ratio = ratio;
+  }
+
+  function initTrimControls(clip) {
+    trimState.duration = clip.duration;
+    trimState.start    = 0;
+    trimState.end      = clip.duration;
+
+    document.getElementById('trimStartInput').max = clip.duration;
+    document.getElementById('trimEndInput').max   = clip.duration;
+    document.getElementById('trimStartInput').value = '0';
+    document.getElementById('trimEndInput').value   = clip.duration.toFixed(1);
+    document.getElementById('trim-controls').style.display = 'block';
+    document.getElementById('cut-empty').style.display     = 'none';
+    updateTrimBar();
+  }
+
+  function updateTrimFromInputs() {
+    const s = parseFloat(document.getElementById('trimStartInput').value) || 0;
+    const e = parseFloat(document.getElementById('trimEndInput').value)   || trimState.duration;
+    trimState.start = Math.max(0, Math.min(s, trimState.duration - 1));
+    trimState.end   = Math.max(trimState.start + 1, Math.min(e, trimState.duration));
+    updateTrimBar();
+  }
+
+  function updateTrimBar() {
+    const bar   = document.getElementById('trimBar');
+    const fill  = document.getElementById('trimFill');
+    const handleL = document.getElementById('trimHandleL');
+    const handleR = document.getElementById('trimHandleR');
+    const durEl = document.getElementById('trimDuration');
+
+    const pct   = (v) => (v / trimState.duration) * 100;
+    const left  = pct(trimState.start);
+    const right = pct(trimState.end);
+
+    fill.style.left  = left + '%';
+    fill.style.width = (right - left) + '%';
+    handleL.style.left = `calc(${left}% - 8px)`;
+    handleR.style.left = `calc(${right}% - 8px)`;
+
+    const dur = trimState.end - trimState.start;
+    if (durEl) durEl.textContent = dur.toFixed(1) + 'ث';
+  }
+
+  function startTrimDrag(e) {
+    e.preventDefault();
+    const bar  = document.getElementById('trimBar');
+    const rect = bar.getBoundingClientRect();
+    const cx   = (e.touches ? e.touches[0].clientX : e.clientX);
+    const pct  = Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
+    const val  = pct * trimState.duration;
+
+    // تحديد أي handle أقرب
+    const distL = Math.abs(val - trimState.start);
+    const distR = Math.abs(val - trimState.end);
+    trimState.dragging = distL < distR ? 'L' : 'R';
+
+    const onMove = (ev) => {
+      const mx = (ev.touches ? ev.touches[0].clientX : ev.clientX);
+      const p  = Math.max(0, Math.min(1, (mx - rect.left) / rect.width));
+      const v  = p * trimState.duration;
+      if (trimState.dragging === 'L') {
+        trimState.start = Math.max(0, Math.min(v, trimState.end - 1));
+        document.getElementById('trimStartInput').value = trimState.start.toFixed(1);
+      } else {
+        trimState.end = Math.min(trimState.duration, Math.max(v, trimState.start + 1));
+        document.getElementById('trimEndInput').value = trimState.end.toFixed(1);
+      }
+      updateTrimBar();
+    };
+
+    const onUp = () => {
+      trimState.dragging = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+      document.removeEventListener('touchend',  onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    document.addEventListener('touchend',  onUp);
+  }
+
+  function previewTrim() {
+    const video = document.getElementById('phoneVideo');
+    if (!video || !video.src) { showNotif('⚠️ لا يوجد فيديو للمعاينة', true); return; }
+    video.currentTime = trimState.start;
+    video.style.display = 'block';
+    document.getElementById('phoneBg').style.display = 'none';
+    video.play();
+    document.getElementById('phonePlayBtn').style.display = 'none';
+
+    // إيقاف عند نقطة النهاية
+    const stopAt = () => {
+      if (video.currentTime >= trimState.end) {
+        video.pause();
+        document.getElementById('phonePlayBtn').style.display = 'flex';
+        video.removeEventListener('timeupdate', stopAt);
+      }
+    };
+    video.addEventListener('timeupdate', stopAt);
+    showNotif('▶ معاينة القطعة المحددة');
+  }
+
+  async function applyTrimAndDownload() {
+    if (!currentClips.length) { showNotif('⚠️ لا يوجد فيديو', true); return; }
+    if (!currentJobId)        { showNotif('⚠️ لا يوجد Job ID', true); return; }
+
+    const clip        = currentClips[selectedClipIndex];
+    const captionEl   = document.querySelector('#panel-captions .caption-item.active .caption-text');
+    const captionText = captionEl ? captionEl.textContent.trim() : (clip.text || '');
+    const colorHex    = editorSettings.color.replace('#', '');
+
+    showNotif('⏳ جارٍ قطع الفيديو وإضافة التعديلات...');
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/trim/${currentJobId}/${selectedClipIndex}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trimStart: trimState.start,
+          trimEnd:   trimState.end,
+          text:      captionText,
+          color:     colorHex || 'white',
+          fontSize:  editorSettings.fontSize || 32,
+          ratio:     trimState.ratio || '9:16'
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const a = document.createElement('a');
+        a.href = `${BACKEND_URL}${data.download}`;
+        a.download = `short_${selectedClipIndex + 1}_trimmed.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showNotif(`✅ تم القطع! المدة: ${data.duration}ث — بدأ التحميل`);
+      } else {
+        showNotif('❌ ' + data.error, true);
+      }
+    } catch (err) {
+      showNotif('❌ خطأ: ' + err.message, true);
+    }
+  }
   function updateCutPanel() {
     const list = document.getElementById('cut-clips-list');
     if (!list) return;
     if (!currentClips.length) {
-      list.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">لا توجد كليبات بعد</div>';
+      list.innerHTML = '';
+      const tc = document.getElementById('trim-controls');
+      const ce = document.getElementById('cut-empty');
+      if (tc) tc.style.display = 'none';
+      if (ce) ce.style.display = 'block';
       return;
     }
     list.innerHTML = '';
@@ -779,16 +996,16 @@
       const el = document.createElement('div');
       el.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:10px;margin-bottom:8px;background:${i===selectedClipIndex?'rgba(0,229,255,0.1)':'var(--surface2)'};border:1px solid ${i===selectedClipIndex?'var(--accent)':'var(--border)'};cursor:pointer`;
       el.innerHTML = `
-        <div>
+        <div onclick="selectClip(${i})" style="flex:1">
           <div style="font-size:12px;font-weight:700;color:${colors[i%3]}">Short ${i+1}</div>
-          <div style="font-size:11px;color:var(--text-muted)">${formatTime(clip.start)} – ${formatTime(clip.end)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${formatTime(clip.start)} – ${formatTime(clip.end)} · ${clip.duration.toFixed(1)}ث</div>
         </div>
         <a href="${BACKEND_URL}${clip.download}" download="short_${i+1}.mp4"
-           style="background:var(--accent);color:#000;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;cursor:pointer">⬇️ تحميل</a>
+           style="background:var(--accent);color:#000;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none">⬇️</a>
       `;
-      el.onclick = (e) => { if(e.target.tagName!=='A') selectClip(i); };
       list.appendChild(el);
     });
+    initTrimControls(currentClips[selectedClipIndex]);
   }
 
   // ── تطبيق الخط ────────────────────────────────────────────

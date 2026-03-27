@@ -126,6 +126,102 @@ def download(job_id, clip_index):
     )
 
 
+# ── POST /api/trim/<job_id>/<clip_index> ─────────────────────
+# قطع الفيديو من نقطة بداية إلى نهاية محددة
+@app.route('/api/trim/<job_id>/<int:clip_index>', methods=['POST'])
+def trim_clip(job_id, clip_index):
+    job = jobs.get(job_id)
+    if not job or job['status'] != 'done':
+        return jsonify({'error': 'الكليب غير جاهز'}), 404
+
+    clips = job.get('clips', [])
+    if clip_index >= len(clips):
+        return jsonify({'error': 'رقم الكليب غير صحيح'}), 400
+
+    data        = request.get_json() or {}
+    trim_start  = float(data.get('trimStart', 0))
+    trim_end    = float(data.get('trimEnd', clips[clip_index]['duration']))
+    caption     = data.get('text', clips[clip_index].get('text', ''))
+    color       = data.get('color', 'white')
+    font_size   = int(data.get('fontSize', 32))
+    ratio       = data.get('ratio', '9:16')
+
+    input_path  = clips[clip_index]['file']
+    render_id   = str(uuid.uuid4())[:8]
+    output_path = f"outputs/{job_id}_trim_{clip_index}_{render_id}.mp4"
+
+    try:
+        import subprocess
+
+        duration = trim_end - trim_start
+        if duration <= 0:
+            return jsonify({'error': 'نقطة البداية يجب أن تكون قبل النهاية'}), 400
+
+        # فلتر النسبة
+        ratio_filters = {
+            '9:16': 'scale=640:360,pad=640:1136:0:(1136-360)/2:black',
+            '1:1':  'scale=640:640:force_original_aspect_ratio=decrease,pad=640:640:(ow-iw)/2:(oh-ih)/2:black',
+            '16:9': 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black',
+        }
+        vf = ratio_filters.get(ratio, ratio_filters['9:16'])
+
+        # فلتر النص
+        if caption.strip():
+            safe = caption.replace("'", "\\'").replace(':', '\\:')[:120]
+            vf += (
+                f",drawtext=text='{safe}'"
+                f":fontsize={font_size}"
+                f":fontcolor={color}"
+                f":x=(w-text_w)/2:y=h-text_h-30"
+                f":box=1:boxcolor=black@0.65:boxborderw=10"
+            )
+
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', input_path,
+            '-ss', str(trim_start),
+            '-t',  str(duration),
+            '-vf', vf,
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '26',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-movflags', '+faststart',
+            output_path
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        if result.returncode != 0:
+            return jsonify({'error': result.stderr[-400:]}), 500
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 500:
+            return jsonify({'error': 'الملف الناتج فارغ'}), 500
+
+        return jsonify({
+            'success':  True,
+            'duration': round(duration, 2),
+            'download': f'/api/dl/{job_id}/{clip_index}/{render_id}'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── GET /api/dl/<job_id>/<clip_index>/<render_id> ─────────────
+@app.route('/api/dl/<job_id>/<int:clip_index>/<render_id>')
+def download_trimmed(job_id, clip_index, render_id):
+    path = f"outputs/{job_id}_trim_{clip_index}_{render_id}.mp4"
+    if not os.path.exists(path):
+        # جرب render أيضاً
+        path = f"outputs/{job_id}_render_{clip_index}_{render_id}.mp4"
+    if not os.path.exists(path):
+        return jsonify({'error': 'الملف غير موجود'}), 404
+    return send_file(path, as_attachment=True,
+                     download_name=f'short_{clip_index+1}_edited.mp4',
+                     mimetype='video/mp4')
+
+
 # ── POST /api/render/<job_id>/<clip_index> ────────────────────
 # يعيد تصيير الكليب مع النصوص والتأثيرات والنسبة المطلوبة
 @app.route('/api/render/<job_id>/<int:clip_index>', methods=['POST'])
