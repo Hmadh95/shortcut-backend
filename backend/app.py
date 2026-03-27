@@ -157,41 +157,43 @@ def trim_clip(job_id, clip_index):
         if duration <= 0:
             return jsonify({'error': 'نقطة البداية يجب أن تكون قبل النهاية'}), 400
 
-        # فلتر النسبة
+        # فلتر النسبة — أبعاد صغيرة لسرعة المعالجة
         ratio_filters = {
-            '9:16': 'scale=640:360,pad=640:1136:0:(1136-360)/2:black',
-            '1:1':  'scale=640:640:force_original_aspect_ratio=decrease,pad=640:640:(ow-iw)/2:(oh-ih)/2:black',
-            '16:9': 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black',
+            '9:16': 'scale=360:640:force_original_aspect_ratio=decrease,pad=360:640:(ow-iw)/2:(oh-ih)/2:black',
+            '1:1':  'scale=480:480:force_original_aspect_ratio=decrease,pad=480:480:(ow-iw)/2:(oh-ih)/2:black',
+            '16:9': 'scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2:black',
         }
         vf = ratio_filters.get(ratio, ratio_filters['9:16'])
 
         # فلتر النص
         if caption.strip():
-            safe = caption.replace("'", "\\'").replace(':', '\\:')[:120]
+            safe = caption.replace("'", "").replace(':', ' ').replace('\\', '')[:80]
             vf += (
                 f",drawtext=text='{safe}'"
-                f":fontsize={font_size}"
-                f":fontcolor={color}"
-                f":x=(w-text_w)/2:y=h-text_h-30"
-                f":box=1:boxcolor=black@0.65:boxborderw=10"
+                f":fontsize={min(font_size, 24)}"
+                f":fontcolor={color if color else 'white'}"
+                f":x=(w-text_w)/2:y=h-text_h-20"
+                f":box=1:boxcolor=black@0.6:boxborderw=6"
             )
 
         cmd = [
             'ffmpeg', '-y',
+            '-ss', str(trim_start),   # -ss قبل -i أسرع بكثير
             '-i', input_path,
-            '-ss', str(trim_start),
-            '-t',  str(duration),
+            '-t', str(duration),
             '-vf', vf,
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '26',
+            '-preset', 'ultrafast',   # أسرع preset
+            '-tune', 'fastdecode',    # تحسين السرعة
+            '-crf', '32',             # جودة أقل = سرعة أعلى
             '-c:a', 'aac',
-            '-b:a', '128k',
+            '-b:a', '96k',
+            '-threads', '0',          # استخدام كل الـ CPU cores
             '-movflags', '+faststart',
             output_path
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
             return jsonify({'error': result.stderr[-400:]}), 500
 

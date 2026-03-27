@@ -700,31 +700,35 @@
   // ── تصيير الكليب مع التعديلات ────────────────────────────
   async function renderAndDownload() {
     if (!currentClips.length) { showNotif('⚠️ لا يوجد فيديو بعد', true); return; }
+    if (!currentJobId)        { showNotif('⚠️ لا يوجد Job ID', true); return; }
+
+    const btn = document.querySelector('.editor-actions button[onclick="renderAndDownload()"]');
+    if (btn) { btn.textContent = '⏳ جارٍ...'; btn.disabled = true; }
 
     const clip = currentClips[selectedClipIndex];
-    const captionEl = document.querySelector(`#panel-captions .caption-item.active .caption-text`);
+    const captionEl = document.querySelector('#panel-captions .caption-item.active .caption-text');
     const captionText = captionEl ? captionEl.textContent.trim() : clip.text || '';
+    const ratio = trimState.ratio || '9:16';
 
-    // تحديد النسبة المختارة
-    const ratioBtn = document.querySelector('#panel-size .effect-chip.active');
-    const ratio = ratioBtn ? ratioBtn.textContent.replace(' Shorts','').replace(' مربع','').replace(' أفقي','').trim() : '9:16';
-
-    showNotif('⏳ جارٍ تصيير الفيديو مع التعديلات...');
+    let prog = 0;
+    const progInterval = setInterval(() => {
+      prog = Math.min(prog + 3, 90);
+      showNotif(`⏳ جارٍ التصيير... ${prog}%`);
+    }, 1000);
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/render/${currentJobId}/${selectedClipIndex}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text:      captionText,
-          color:     editorSettings.color.replace('#',''),
-          fontSize:  editorSettings.fontSize,
-          ratio:     ratio,
-          start:     clip.start,
-          duration:  clip.duration
+          text:     captionText,
+          color:    (editorSettings.color || 'white').replace('#',''),
+          fontSize: editorSettings.fontSize || 24,
+          ratio:    ratio
         })
       });
 
+      clearInterval(progInterval);
       const data = await res.json();
       if (data.success) {
         const a = document.createElement('a');
@@ -733,12 +737,15 @@
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        showNotif('✅ تم تصيير الفيديو وبدأ التحميل!');
+        showNotif('✅ تم التصيير وبدأ التحميل!');
       } else {
         showNotif(`❌ ${data.error}`, true);
       }
     } catch (e) {
+      clearInterval(progInterval);
       showNotif('❌ فشل التصيير: ' + e.message, true);
+    } finally {
+      if (btn) { btn.textContent = '🎬 تصيير'; btn.disabled = false; }
     }
   }
 
@@ -942,12 +949,20 @@
     if (!currentClips.length) { showNotif('⚠️ لا يوجد فيديو', true); return; }
     if (!currentJobId)        { showNotif('⚠️ لا يوجد Job ID', true); return; }
 
+    const btn = document.querySelector('#panel-cut button');
+    if (btn) { btn.textContent = '⏳ جارٍ المعالجة...'; btn.disabled = true; }
+
     const clip        = currentClips[selectedClipIndex];
     const captionEl   = document.querySelector('#panel-captions .caption-item.active .caption-text');
     const captionText = captionEl ? captionEl.textContent.trim() : (clip.text || '');
-    const colorHex    = editorSettings.color.replace('#', '');
+    const colorHex    = editorSettings.color || 'white';
 
-    showNotif('⏳ جارٍ قطع الفيديو وإضافة التعديلات...');
+    // شريط تقدم وهمي
+    let prog = 0;
+    const progInterval = setInterval(() => {
+      prog = Math.min(prog + 3, 90);
+      showNotif(`⏳ جارٍ المعالجة... ${prog}%`);
+    }, 1000);
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/trim/${currentJobId}/${selectedClipIndex}`, {
@@ -957,13 +972,15 @@
           trimStart: trimState.start,
           trimEnd:   trimState.end,
           text:      captionText,
-          color:     colorHex || 'white',
-          fontSize:  editorSettings.fontSize || 32,
+          color:     colorHex.replace('#', '') || 'white',
+          fontSize:  editorSettings.fontSize || 24,
           ratio:     trimState.ratio || '9:16'
         })
       });
 
+      clearInterval(progInterval);
       const data = await res.json();
+
       if (data.success) {
         const a = document.createElement('a');
         a.href = `${BACKEND_URL}${data.download}`;
@@ -971,12 +988,15 @@
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        showNotif(`✅ تم القطع! المدة: ${data.duration}ث — بدأ التحميل`);
+        showNotif(`✅ تم! المدة: ${data.duration}ث — بدأ التحميل`);
       } else {
         showNotif('❌ ' + data.error, true);
       }
     } catch (err) {
+      clearInterval(progInterval);
       showNotif('❌ خطأ: ' + err.message, true);
+    } finally {
+      if (btn) { btn.textContent = '🎬 قطع وتحميل'; btn.disabled = false; }
     }
   }
   function updateCutPanel() {
