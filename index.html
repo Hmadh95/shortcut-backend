@@ -113,9 +113,10 @@
       </div>
       <div class="editor-title" id="editorTitle">محرر Shorts — في انتظار الفيديو...</div>
       <div class="editor-actions">
-        <button class="editor-btn" onclick="saveClips()">حفظ</button>
-        <button class="editor-btn" onclick="previewClip()">معاينة</button>
-        <button class="editor-btn primary" id="downloadBtn" onclick="downloadCurrentClip()">تحميل</button>
+        <button class="editor-btn" onclick="saveClips()">💾 حفظ</button>
+        <button class="editor-btn" onclick="previewClip()">▶ معاينة</button>
+        <button class="editor-btn" onclick="renderAndDownload()" style="background:var(--accent2);border-color:var(--accent2);color:#fff">🎬 تصيير</button>
+        <button class="editor-btn primary" id="downloadBtn" onclick="downloadCurrentClip()">⬇️ تحميل</button>
       </div>
     </div>
 
@@ -638,10 +639,49 @@
     showNotif(`⬇️ جارٍ تحميل Short ${selectedClipIndex + 1}...`);
   }
 
-  // ── معاينة الكليب ─────────────────────────────────────────
-  function previewClip() {
-    if (!currentClips.length) { showNotif('⚠️ لا يوجد فيديو للمعاينة', true); return; }
-    playPhoneVideo();
+  // ── تصيير الكليب مع التعديلات ────────────────────────────
+  async function renderAndDownload() {
+    if (!currentClips.length) { showNotif('⚠️ لا يوجد فيديو بعد', true); return; }
+
+    const clip = currentClips[selectedClipIndex];
+    const captionEl = document.querySelector(`#panel-captions .caption-item.active .caption-text`);
+    const captionText = captionEl ? captionEl.textContent.trim() : clip.text || '';
+
+    // تحديد النسبة المختارة
+    const ratioBtn = document.querySelector('#panel-size .effect-chip.active');
+    const ratio = ratioBtn ? ratioBtn.textContent.replace(' Shorts','').replace(' مربع','').replace(' أفقي','').trim() : '9:16';
+
+    showNotif('⏳ جارٍ تصيير الفيديو مع التعديلات...');
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/render/${currentJobId}/${selectedClipIndex}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text:      captionText,
+          color:     editorSettings.color.replace('#',''),
+          fontSize:  editorSettings.fontSize,
+          ratio:     ratio,
+          start:     clip.start,
+          duration:  clip.duration
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const a = document.createElement('a');
+        a.href = `${BACKEND_URL}${data.download}`;
+        a.download = `short_${selectedClipIndex + 1}_edited.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showNotif('✅ تم تصيير الفيديو وبدأ التحميل!');
+      } else {
+        showNotif(`❌ ${data.error}`, true);
+      }
+    } catch (e) {
+      showNotif('❌ فشل التصيير: ' + e.message, true);
+    }
   }
 
   // ── تحديث لوحة النصوص بالبيانات الحقيقية ─────────────────
