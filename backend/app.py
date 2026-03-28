@@ -9,9 +9,10 @@ import threading
 import json
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from processor import process_video
+from processor import process_video_file, process_video
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB
 
 CORS(app, resources={r"/api/*": {"origins": "*"}}, 
      supports_credentials=False,
@@ -48,6 +49,44 @@ def home():
         'service': 'ShortCut AI Backend',
         'version': '1.0.0'
     })
+
+
+# ── POST /api/upload ──────────────────────────────────────────
+# رفع ملف فيديو مباشرة بدلاً من رابط YouTube
+@app.route('/api/upload', methods=['POST'])
+def upload_video():
+    if 'video' not in request.files:
+        return jsonify({'error': 'لم يتم إرسال ملف'}), 400
+
+    file = request.files['video']
+    if not file.filename:
+        return jsonify({'error': 'اسم الملف فارغ'}), 400
+
+    job_id = str(uuid.uuid4())
+    os.makedirs('downloads', exist_ok=True)
+    os.makedirs('outputs', exist_ok=True)
+
+    # حفظ الملف
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'mp4'
+    video_path = f"downloads/{job_id}.{ext}"
+    file.save(video_path)
+
+    jobs[job_id] = {
+        'status':   'processing',
+        'progress': 10,
+        'step':     'تم رفع الفيديو، جارٍ التحليل...',
+        'clips':    [],
+        'error':    None
+    }
+
+    thread = threading.Thread(
+        target=process_video_file,
+        args=(job_id, video_path, jobs)
+    )
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({'jobId': job_id}), 202
 
 
 # ── POST /api/convert ─────────────────────────────────────────

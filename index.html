@@ -54,23 +54,68 @@
     في ثوانٍ
   </h1>
   <p class="hero-sub">
-    أدخل رابط أي فيديو YouTube وسيقوم الذكاء الاصطناعي تلقائياً باستخراج أفضل اللحظات وإنشاء Shorts جاهزة للنشر مع نصوص متزامنة
+    ارفع فيديو مباشرة أو أدخل رابط YouTube — سيقوم الذكاء الاصطناعي باستخراج أفضل اللحظات وإنشاء Shorts مع نصوص متزامنة
   </p>
 
   <div class="url-box">
-    <div class="url-input-wrapper">
-      <span class="url-icon">▶</span>
-      <input 
-        class="url-input" 
-        type="url" 
-        id="urlInput"
-        placeholder="https://www.youtube.com/watch?v=..." 
-        dir="ltr"
-      />
-      <button class="convert-btn" onclick="startConversion()">
-        ✨ حوّل الآن
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;margin-bottom:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px">
+      <button id="tab-upload" onclick="switchTab('upload')"
+        style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#000;font-family:'Cairo',sans-serif;font-weight:700;font-size:14px;cursor:pointer;transition:all 0.2s">
+        📁 رفع فيديو
+      </button>
+      <button id="tab-url" onclick="switchTab('url')"
+        style="flex:1;padding:10px;border:none;border-radius:8px;background:transparent;color:var(--text-muted);font-family:'Cairo',sans-serif;font-weight:700;font-size:14px;cursor:pointer;transition:all 0.2s">
+        🔗 رابط YouTube
       </button>
     </div>
+
+    <!-- Upload Panel -->
+    <div id="panel-upload">
+      <div id="dropZone"
+        style="border:2px dashed var(--border);border-radius:16px;padding:40px 24px;text-align:center;cursor:pointer;transition:all 0.3s;background:var(--surface)"
+        onclick="document.getElementById('fileInput').click()"
+        ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+        <div style="font-size:48px;margin-bottom:12px">🎬</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">اسحب وأفلت الفيديو هنا</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">أو اضغط لاختيار ملف</div>
+        <div style="font-size:12px;color:var(--text-muted)">MP4, MOV, AVI, MKV · حتى 500MB</div>
+      </div>
+      <input type="file" id="fileInput" accept="video/*" style="display:none" onchange="fileSelected(this)">
+      <div id="fileInfo" style="display:none;margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:32px">🎥</span>
+          <div style="flex:1">
+            <div id="fileName" style="font-weight:700;font-size:14px"></div>
+            <div id="fileSize" style="font-size:12px;color:var(--text-muted)"></div>
+          </div>
+          <button onclick="clearFile()"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px">✕</button>
+        </div>
+        <div id="uploadProgress" style="display:none;margin-top:12px">
+          <div style="background:var(--surface2);border-radius:100px;height:6px;overflow:hidden">
+            <div id="uploadBar" style="height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width 0.3s;width:0%"></div>
+          </div>
+          <div id="uploadPct" style="font-size:12px;color:var(--text-muted);margin-top:6px;text-align:center">0%</div>
+        </div>
+      </div>
+      <button onclick="startUpload()"
+        style="width:100%;margin-top:12px;background:linear-gradient(135deg,var(--accent),#00b8d9);color:#000;border:none;padding:16px;border-radius:12px;font-family:'Cairo',sans-serif;font-weight:700;font-size:16px;cursor:pointer;transition:all 0.2s"
+        id="uploadBtn">
+        ✨ تحليل وإنشاء Shorts
+      </button>
+    </div>
+
+    <!-- URL Panel -->
+    <div id="panel-url" style="display:none">
+      <div class="url-input-wrapper">
+        <span class="url-icon">▶</span>
+        <input class="url-input" type="url" id="urlInput"
+          placeholder="https://www.youtube.com/watch?v=..." dir="ltr"/>
+        <button class="convert-btn" onclick="startConversion()">✨ حوّل الآن</button>
+      </div>
+    </div>
+
     <div class="url-hint">
       <span>⚡ سرعة معالجة فائقة</span>
       <span>🎯 دقة تعرف ٩٨٪</span>
@@ -485,6 +530,99 @@
   //  مثال: 'https://shortcut-ai.up.railway.app'
   // ══════════════════════════════════════════════════════════
   const BACKEND_URL = 'https://shortcut-backend-ham.up.railway.app';
+
+  // ── Tab switching ──────────────────────────────────────────
+  function switchTab(tab) {
+    const isUpload = tab === 'upload';
+    document.getElementById('panel-upload').style.display = isUpload ? 'block' : 'none';
+    document.getElementById('panel-url').style.display    = isUpload ? 'none'  : 'block';
+    document.getElementById('tab-upload').style.background = isUpload ? 'var(--accent)' : 'transparent';
+    document.getElementById('tab-upload').style.color      = isUpload ? '#000' : 'var(--text-muted)';
+    document.getElementById('tab-url').style.background    = isUpload ? 'transparent' : 'var(--accent)';
+    document.getElementById('tab-url').style.color         = isUpload ? 'var(--text-muted)' : '#000';
+  }
+
+  // ── Drag & Drop ────────────────────────────────────────────
+  function dragOver(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').style.borderColor = 'var(--accent)';
+    document.getElementById('dropZone').style.background  = 'rgba(0,229,255,0.05)';
+  }
+  function dragLeave(e) {
+    document.getElementById('dropZone').style.borderColor = 'var(--border)';
+    document.getElementById('dropZone').style.background  = 'var(--surface)';
+  }
+  function dropFile(e) {
+    e.preventDefault(); dragLeave(e);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('video/')) showFileInfo(file);
+    else showNotif('⚠️ الرجاء اختيار ملف فيديو', true);
+  }
+  function fileSelected(input) {
+    if (input.files[0]) showFileInfo(input.files[0]);
+  }
+  function showFileInfo(file) {
+    window._selectedFile = file;
+    document.getElementById('fileInfo').style.display = 'block';
+    document.getElementById('dropZone').style.display = 'none';
+    document.getElementById('fileName').textContent   = file.name;
+    document.getElementById('fileSize').textContent   = (file.size/1024/1024).toFixed(1) + ' MB';
+  }
+  function clearFile() {
+    window._selectedFile = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('fileInfo').style.display = 'none';
+    document.getElementById('dropZone').style.display = 'block';
+  }
+
+  // ── رفع الفيديو ────────────────────────────────────────────
+  async function startUpload() {
+    const file = window._selectedFile;
+    if (!file) { showNotif('⚠️ الرجاء اختيار ملف فيديو أولاً', true); return; }
+
+    const btn = document.getElementById('uploadBtn');
+    btn.disabled = true; btn.textContent = '⏳ جارٍ الرفع...';
+    document.getElementById('uploadProgress').style.display = 'block';
+
+    const formData = new FormData();
+    formData.append('video', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BACKEND_URL}/api/upload`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        document.getElementById('uploadBar').style.width = pct + '%';
+        document.getElementById('uploadPct').textContent = `جارٍ الرفع... ${pct}%`;
+        btn.textContent = `⏳ رفع ${pct}%`;
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 202) {
+        const data = JSON.parse(xhr.responseText);
+        currentJobId = data.jobId;
+        document.getElementById('uploadPct').textContent = 'تم الرفع! جارٍ التحليل...';
+        isCancelled = false;
+        resetOverlay();
+        document.getElementById('overlay').classList.add('show');
+        setOverlayStep(1);
+        pollInterval = setInterval(() => pollStatus(currentJobId), 2000);
+      } else {
+        const err = JSON.parse(xhr.responseText);
+        showNotif('❌ ' + (err.error || 'فشل الرفع'), true);
+        btn.disabled = false; btn.textContent = '✨ تحليل وإنشاء Shorts';
+      }
+    };
+
+    xhr.onerror = () => {
+      showNotif('❌ فشل الاتصال بالسيرفر', true);
+      btn.disabled = false; btn.textContent = '✨ تحليل وإنشاء Shorts';
+    };
+
+    xhr.send(formData);
+  }
 
   // ── حالة التطبيق ──────────────────────────────────────────
   let currentJobId   = null;

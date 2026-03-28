@@ -10,6 +10,64 @@ import urllib.request
 from faster_whisper import WhisperModel
 
 
+def process_video_file(job_id: str, video_path: str, jobs: dict):
+    """معالجة فيديو تم رفعه مباشرة — يتخطى خطوة التحميل"""
+    try:
+        os.makedirs('downloads', exist_ok=True)
+        os.makedirs('outputs', exist_ok=True)
+
+        # احسب المدة
+        import subprocess
+        probe = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', video_path],
+            capture_output=True, text=True
+        )
+        duration = float(probe.stdout.strip()) if probe.stdout.strip() else 60.0
+
+        _update(jobs, job_id, 20, 'جارٍ استخراج الصوت...')
+        audio_path = _extract_audio(job_id, video_path)
+
+        _update(jobs, job_id, 40, 'الذكاء الاصطناعي يتعرف على الكلام...')
+        segments = _transcribe(audio_path)
+
+        _update(jobs, job_id, 65, 'AI يحدد أفضل اللحظات...')
+        best_clips = _find_best_clips(segments, duration)
+
+        _update(jobs, job_id, 78, 'جارٍ إنشاء الـ Shorts...')
+        clip_results = []
+        total = len(best_clips)
+
+        for i, clip in enumerate(best_clips):
+            progress = 78 + int((i / total) * 18)
+            _update(jobs, job_id, progress, f'جارٍ معالجة الكليب {i+1} من {total}...')
+            output_path = f"outputs/{job_id}_short_{i}.mp4"
+            _create_short(video_path, output_path, clip)
+            clip_results.append({
+                'file':     output_path,
+                'start':    round(clip['start'], 2),
+                'end':      round(clip['start'] + clip['duration'], 2),
+                'duration': round(clip['duration'], 2),
+                'text':     clip['text'],
+                'score':    round(clip['score'], 2),
+                'download': f"/api/download/{job_id}/{i}"
+            })
+
+        jobs[job_id].update({
+            'status':   'done',
+            'progress': 100,
+            'step':     f'تم إنشاء {len(clip_results)} Shorts بنجاح! 🎉',
+            'clips':    clip_results,
+            'title':    os.path.basename(video_path),
+        })
+
+        _cleanup(audio_path)
+
+    except Exception as e:
+        jobs[job_id].update({'status': 'error', 'step': 'حدث خطأ', 'error': str(e)})
+        print(f"[ERROR] upload job {job_id}: {e}")
+
+
 def process_video(job_id: str, url: str, jobs: dict):
     """الدالة الرئيسية — تُشغَّل في خيط منفصل"""
 
